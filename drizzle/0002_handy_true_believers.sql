@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "trips_driver_active_unique" ON "trips" USING btree ("driver_id") WHERE "trips"."status" in ('created', 'in_transit');

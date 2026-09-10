@@ -83,6 +83,21 @@ export class PositionRepository {
     return new Map(positions.map((position) => [position.tripId, position]));
   }
 
+  async listRecent(
+    tripId: string,
+    limit = 100,
+  ): Promise<TripPosition[]> {
+    return this.db
+      .select()
+      .from(tripPositions)
+      .where(eq(tripPositions.tripId, tripId))
+      .orderBy(
+        desc(tripPositions.recordedAt),
+        desc(tripPositions.id),
+      )
+      .limit(limit);
+  }
+
   async listAfter(
     tripId: string,
     afterId: number,

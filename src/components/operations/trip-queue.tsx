@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {
-  ArrowSquareOutIcon,
+  CaretRightIcon,
   MagnifyingGlassIcon,
   MapPinIcon,
   TruckIcon,
@@ -24,8 +24,6 @@ const filters: Array<{ value: "all" | TripStatus; label: string }> = [
 
 export function TripQueue({
   trips,
-  selectedId,
-  onSelect,
   query,
   onQueryChange,
   filter,
@@ -34,8 +32,6 @@ export function TripQueue({
   loading,
 }: {
   trips: TripView[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
   query: string;
   onQueryChange: (query: string) => void;
   filter: "all" | TripStatus;
@@ -44,100 +40,110 @@ export function TripQueue({
   loading: boolean;
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-b border-border bg-surface lg:border-b-0 lg:border-r">
-      <div className="border-b border-border p-4">
-        <h2 className="text-sm font-semibold">Trips</h2>
-        <label className="mt-3 flex h-10 items-center gap-2 rounded-[10px] border border-border bg-background px-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-          <MagnifyingGlassIcon
-            size={16}
-            className="shrink-0 text-muted-foreground"
-          />
-          <span className="sr-only">Search trips</span>
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search trips"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-        <div
-          className="mt-3 flex gap-1 overflow-x-auto"
-          aria-label="Filter trips by status"
-        >
-          {filters.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => onFilterChange(item.value)}
-              aria-pressed={filter === item.value}
-              className={cn(
-                "shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                filter === item.value
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {item.label} {counts[item.value]}
-            </button>
-          ))}
-        </div>
+    <section className="w-full max-w-6xl self-start">
+      <div className="mb-5">
+        <h2 className="text-xl font-semibold tracking-tight">Trips</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Review assignments and open a trip to monitor its progress.
+        </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-[0_12px_32px_rgb(20_22_26/8%)]">
+        <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
+          <label className="flex h-10 w-full max-w-md items-center gap-2 rounded-[10px] border border-border bg-background px-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+            <MagnifyingGlassIcon
+              size={16}
+              className="shrink-0 text-muted-foreground"
+            />
+            <span className="sr-only">Search trips</span>
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search by trip, vehicle, driver, or route"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          <div
+            className="flex gap-1 overflow-x-auto"
+            aria-label="Filter trips by status"
+          >
+            {filters.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => onFilterChange(item.value)}
+                aria-pressed={filter === item.value}
+                className={cn(
+                  "shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  filter === item.value
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {item.label} {counts[item.value]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="hidden grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] gap-5 border-b border-border bg-muted/35 px-5 py-2.5 text-xs font-semibold text-muted-foreground lg:grid">
+          <span>Trip</span>
+          <span>Route</span>
+          <span>Last update</span>
+          <span>Status</span>
+        </div>
+
+        <div className="p-2">
         {loading ? (
           <TripQueueSkeleton />
         ) : trips.length ? (
           <ul className="grid gap-1">
-            {trips.map((trip) => {
-              const selected = trip.trip.id === selectedId;
-              return (
-                <li key={trip.trip.id} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(trip.trip.id)}
-                    className={cn(
-                      "group w-full rounded-[10px] border px-3 py-3 pr-11 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                      selected
-                        ? "border-primary/35 bg-primary/7"
-                        : "border-transparent hover:bg-muted",
-                    )}
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold">
-                          {trip.trip.referenceNumber}
-                        </span>
-                        <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <TruckIcon size={14} />
-                          {trip.vehicle.registrationNumber}
-                        </span>
-                      </span>
-                      <StatusBadge status={trip.trip.status} />
+            {trips.map((trip) => (
+              <li key={trip.trip.id}>
+                <Link
+                  href={`/trips/${trip.trip.id}`}
+                  className="group grid gap-4 rounded-[10px] border border-transparent px-3 py-4 outline-none transition-colors hover:border-border hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-ring lg:grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] lg:items-center lg:gap-5 lg:px-3 lg:py-3"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">
+                      {trip.trip.referenceNumber}
                     </span>
-                    <span className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-                      <MapPinIcon size={14} className="mt-0.5 shrink-0" />
-                      <span className="line-clamp-2">
-                        {trip.trip.pickupAddress} to{" "}
-                        {trip.trip.dropoffAddress}
-                      </span>
+                    <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <TruckIcon size={14} className="shrink-0" />
+                      {trip.vehicle.registrationNumber}
                     </span>
-                    <span className="mt-2 block text-[11px] text-muted-foreground">
-                      Updated {formatRelativeTime(trip.trip.updatedAt)}
+                  </span>
+
+                  <span className="flex min-w-0 items-start gap-2 text-sm leading-5">
+                    <MapPinIcon
+                      size={16}
+                      className="mt-0.5 shrink-0 text-muted-foreground"
+                    />
+                    <span className="line-clamp-2">
+                      {trip.trip.pickupAddress}{" "}
+                      <span className="text-muted-foreground">to</span>{" "}
+                      {trip.trip.dropoffAddress}
                     </span>
-                  </button>
-                  <Link
-                    href={`/trips/${trip.trip.id}`}
-                    aria-label={`Open focused view for ${trip.trip.referenceNumber}`}
-                    className="absolute bottom-3 right-3 grid size-8 place-items-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ArrowSquareOutIcon size={16} />
-                  </Link>
-                </li>
-              );
-            })}
+                  </span>
+
+                  <span className="text-xs text-muted-foreground">
+                    <span className="lg:hidden">Updated </span>
+                    {formatRelativeTime(trip.trip.updatedAt)}
+                  </span>
+
+                  <span className="flex items-center justify-between gap-3">
+                    <StatusBadge status={trip.trip.status} />
+                    <CaretRightIcon
+                      size={16}
+                      className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                    />
+                  </span>
+                </Link>
+              </li>
+            ))}
           </ul>
         ) : (
-          <div className="grid min-h-52 place-items-center p-6 text-center">
+          <div className="grid min-h-56 place-items-center p-6 text-center">
             <div>
               <TruckIcon
                 size={28}
@@ -150,8 +156,9 @@ export function TripQueue({
             </div>
           </div>
         )}
+        </div>
       </div>
-    </aside>
+    </section>
   );
 }
 
@@ -159,7 +166,7 @@ export function StatusBadge({ status }: { status: TripStatus }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold",
+        "shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold",
         status === "in_transit" &&
           "border-primary/25 bg-primary/10 text-primary",
         status === "created" &&
@@ -177,11 +184,11 @@ export function StatusBadge({ status }: { status: TripStatus }) {
 
 function TripQueueSkeleton() {
   return (
-    <div className="grid gap-2 p-1" aria-label="Loading trips">
-      {[0, 1, 2, 3].map((item) => (
+    <div className="grid gap-1" aria-label="Loading trips">
+      {[0, 1, 2].map((item) => (
         <div
           key={item}
-          className="h-32 animate-pulse rounded-[10px] bg-muted"
+          className="h-[76px] animate-pulse rounded-[10px] bg-muted"
         />
       ))}
     </div>

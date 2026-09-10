@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowClockwiseIcon,
   MapPinIcon,
@@ -19,11 +20,10 @@ import type {
 } from "@/lib/operations-types";
 import { getApiErrorMessage, matchesTrip } from "@/lib/operations-ui";
 import { CreateTripDialog } from "./create-trip-dialog";
+import { LocationPingLog } from "./location-ping-log";
 import { OperationsMap } from "./operations-map";
 import { TripInspector } from "./trip-inspector";
 import { TripQueue } from "./trip-queue";
-
-type HealthStatus = "checking" | "available" | "unavailable";
 
 export function OperationsDashboard({
   initialTripId = null,
@@ -37,7 +37,6 @@ export function OperationsDashboard({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [health, setHealth] = useState<HealthStatus>("checking");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | TripStatus>("all");
   const [createOpen, setCreateOpen] = useState(false);
@@ -47,6 +46,9 @@ export function OperationsDashboard({
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [positionLog, setPositionLog] = useState<Position[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(focused);
+  const [positionsError, setPositionsError] = useState<string | null>(null);
   const [runningSimulations, setRunningSimulations] = useState<Set<string>>(
     new Set(),
   );
@@ -73,7 +75,7 @@ export function OperationsDashboard({
         ) {
           return initialTripId;
         }
-        return focused ? null : (body.data[0]?.trip.id ?? null);
+        return null;
       });
       setLastRefresh(new Date());
     } catch (error) {
@@ -85,30 +87,14 @@ export function OperationsDashboard({
     } finally {
       setLoading(false);
     }
-  }, [focused, initialTripId]);
-
-  const checkHealth = useCallback(async () => {
-    try {
-      const response = await fetch("/api/health", { cache: "no-store" });
-      setHealth(response.ok ? "available" : "unavailable");
-    } catch {
-      setHealth("unavailable");
-    }
-  }, []);
+  }, [initialTripId]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void loadTrips();
-      void checkHealth();
     }, 0);
-    const interval = window.setInterval(() => {
-      void checkHealth();
-    }, 30_000);
-    return () => {
-      window.clearTimeout(initialLoad);
-      window.clearInterval(interval);
-    };
-  }, [checkHealth, loadTrips]);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadTrips]);
 
   useEffect(() => {
     if (!createOpen || vehicles.length || optionsLoading) return;
@@ -149,6 +135,54 @@ export function OperationsDashboard({
     void loadOptions();
   }, [createOpen, drivers.length, optionsLoading, vehicles.length]);
 
+  useEffect(() => {
+    if (!focused || !selectedId) return;
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setPositionsLoading(true);
+      setPositionsError(null);
+    }, 0);
+
+    async function loadPositions() {
+      try {
+        const response = await fetch(`/api/trips/${selectedId}/positions`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const body = (await response.json()) as
+          | { data: Position[] }
+          | ApiErrorBody;
+        if (!response.ok || !("data" in body)) {
+          throw new Error(getApiErrorMessage(body as ApiErrorBody));
+        }
+        setPositionLog((current) =>
+          mergePositions(
+            body.data,
+            current.filter((position) => position.tripId === selectedId),
+          ),
+        );
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setPositionsError(
+          error instanceof Error
+            ? error.message
+            : "Location pings could not be loaded.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setPositionsLoading(false);
+        }
+      }
+    }
+
+    void loadPositions();
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [focused, selectedId]);
+
   const selectedTrip =
     trips.find((trip) => trip.trip.id === selectedId) ?? null;
 
@@ -167,8 +201,11 @@ export function OperationsDashboard({
           : trip,
       ),
     );
-  }, []);
-  const streamStatus = useTripEvents(selectedId, handlePosition);
+    if (focused) {
+      setPositionLog((current) => mergePositions([position], current));
+    }
+  }, [focused]);
+  const streamStatus = useTripEvents(focused ? selectedId : null, handlePosition);
 
   const replaceTrip = useCallback((updated: TripView) => {
     setTrips((current) => {
@@ -311,46 +348,33 @@ export function OperationsDashboard({
   );
 
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-background">
+    <main className="flex min-h-[100dvh] flex-col bg-background lg:h-[100dvh] lg:overflow-hidden">
       <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border bg-surface px-4 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-9 min-w-12 place-items-center rounded-[10px] bg-primary px-2 text-sm font-black tracking-tight text-primary-foreground">
+        <Link
+          href="/"
+          aria-label="Go to trips index"
+          className="flex min-w-0 items-center gap-3 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="grid h-9 min-w-12 place-items-center rounded-[10px] bg-primary px-2 text-sm font-semibold tracking-tight text-primary-foreground">
             AWR
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-bold">Operations Control</h1>
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span
-                className={`size-1.5 rounded-full ${
-                  health === "available"
-                    ? "bg-primary"
-                    : health === "unavailable"
-                      ? "bg-destructive"
-                      : "bg-muted-foreground"
-                }`}
-                aria-hidden="true"
-              />
-              <span>
-                {health === "available"
-                  ? "Systems available"
-                  : health === "unavailable"
-                    ? "System unavailable"
-                    : "Checking systems"}
-              </span>
-              {lastRefresh ? (
-                <span className="hidden sm:inline">
-                  Updated{" "}
-                  <time dateTime={lastRefresh.toISOString()}>
-                    {lastRefresh.toLocaleTimeString("en-AE", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </time>
-                </span>
-              ) : null}
-            </div>
+            <h1 className="truncate text-sm font-semibold">
+              Operations Control
+            </h1>
+            {lastRefresh ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Updated{" "}
+                <time dateTime={lastRefresh.toISOString()}>
+                  {lastRefresh.toLocaleTimeString("en-AE", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </p>
+            ) : null}
           </div>
-        </div>
+        </Link>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -389,21 +413,57 @@ export function OperationsDashboard({
           </div>
         </div>
       ) : (
-        <div
-          className={
-            focused
-              ? "grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_380px]"
-              : "grid min-h-0 flex-1 lg:grid-cols-[320px_minmax(380px,1fr)_360px]"
-          }
-        >
-          {!focused ? (
+        focused ? (
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[380px_minmax(0,1fr)]">
+            <div className="grid min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:grid-rows-[minmax(360px,3fr)_minmax(260px,2fr)]">
+              <section className="flex min-h-[420px] min-w-0 flex-col border-b border-border lg:min-h-0">
+                <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border bg-surface px-4">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-semibold">
+                      {selectedTrip
+                        ? `${selectedTrip.trip.pickupAddress} to ${selectedTrip.trip.dropoffAddress}`
+                        : "Live trip map"}
+                    </h2>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPinIcon size={13} />
+                      {selectedTrip?.latestPosition
+                        ? "Showing latest reported position"
+                        : "Showing pickup and drop-off locations"}
+                    </p>
+                  </div>
+                </div>
+                <div className="min-h-72 flex-1">
+                  <OperationsMap trip={selectedTrip} />
+                </div>
+              </section>
+
+              <LocationPingLog
+                positions={positionLog}
+                loading={positionsLoading}
+                error={positionsError}
+              />
+            </div>
+
+            <TripInspector
+              trip={selectedTrip}
+              streamStatus={streamStatus}
+              mutating={mutating}
+              mutationError={mutationError}
+              simulationRunning={
+                selectedId ? runningSimulations.has(selectedId) : false
+              }
+              onTransition={(status) => void transitionTrip(status)}
+              onStartSimulation={(intervalMs) =>
+                void startSimulation(intervalMs)
+              }
+              onStopSimulation={() => void stopSimulation()}
+              focused
+            />
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 justify-center overflow-y-auto bg-background p-4 sm:p-6 lg:p-8">
             <TripQueue
               trips={visibleTrips}
-              selectedId={selectedId}
-              onSelect={(id) => {
-                setSelectedId(id);
-                setMutationError(null);
-              }}
               query={query}
               onQueryChange={setQuery}
               filter={filter}
@@ -411,45 +471,8 @@ export function OperationsDashboard({
               counts={counts}
               loading={loading}
             />
-          ) : null}
-
-          <section className="flex min-h-[420px] min-w-0 flex-col border-b border-border lg:min-h-0 lg:border-b-0">
-            <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border bg-surface px-4">
-              <div className="min-w-0">
-                <h2 className="truncate text-sm font-semibold">
-                  {selectedTrip
-                    ? `${selectedTrip.trip.pickupAddress} to ${selectedTrip.trip.dropoffAddress}`
-                    : "Live trip map"}
-                </h2>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <MapPinIcon size={13} />
-                  {selectedTrip?.latestPosition
-                    ? "Showing latest reported position"
-                    : "Pickup and dropoff route"}
-                </p>
-              </div>
-            </div>
-            <div className="min-h-72 flex-1">
-              <OperationsMap trip={selectedTrip} />
-            </div>
-          </section>
-
-          <TripInspector
-            trip={selectedTrip}
-            streamStatus={streamStatus}
-            mutating={mutating}
-            mutationError={mutationError}
-            simulationRunning={
-              selectedId ? runningSimulations.has(selectedId) : false
-            }
-            onTransition={(status) => void transitionTrip(status)}
-            onStartSimulation={(intervalMs) =>
-              void startSimulation(intervalMs)
-            }
-            onStopSimulation={() => void stopSimulation()}
-            focused={focused}
-          />
-        </div>
+          </div>
+        )
       )}
 
       <CreateTripDialog
@@ -463,4 +486,18 @@ export function OperationsDashboard({
       />
     </main>
   );
+}
+
+function mergePositions(...groups: Position[][]) {
+  const positions = new Map<number, Position>();
+  for (const position of groups.flat()) {
+    positions.set(position.id, position);
+  }
+  return [...positions.values()]
+    .sort(
+      (left, right) =>
+        new Date(right.recordedAt).getTime() -
+          new Date(left.recordedAt).getTime() || right.id - left.id,
+    )
+    .slice(0, 100);
 }

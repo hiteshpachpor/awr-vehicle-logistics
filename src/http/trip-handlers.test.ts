@@ -6,6 +6,7 @@ import {
   createTripHandler,
   ingestLocationHandler,
   listTripsHandler,
+  listTripPositionsHandler,
   startSimulationHandler,
   stopSimulationHandler,
   updateTripHandler,
@@ -18,8 +19,10 @@ function container(overrides: Partial<AppContainer> = {}) {
     tripService: {
       create: vi.fn(),
       list: vi.fn(),
+      get: vi.fn(),
       transition: vi.fn(),
     },
+    positionRepository: { listRecent: vi.fn() },
     locationService: { ingest: vi.fn() },
     simulatorService: { start: vi.fn(), stop: vi.fn() },
     ...overrides,
@@ -49,6 +52,64 @@ describe("trip HTTP handlers", () => {
     expect(app.tripService.create).toHaveBeenCalledOnce();
   });
 
+  it("returns a specific conflict when a vehicle has an active trip", async () => {
+    const app = container();
+    vi.mocked(app.tripService.create).mockRejectedValue(
+      Object.assign(new Error("duplicate key"), {
+        code: "23505",
+        constraint: "trips_vehicle_active_unique",
+      }),
+    );
+    const request = new Request("http://localhost/api/trips", {
+      method: "POST",
+      body: JSON.stringify({
+        vehicleId: "00000000-0000-4000-8000-000000000002",
+        driverId: "00000000-0000-4000-8000-000000000003",
+        pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
+        dropoff: { address: "Sharjah", lat: 25.3, lng: 55.4 },
+      }),
+    });
+
+    const response = await createTripHandler(request, app);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "VEHICLE_ACTIVE_TRIP_EXISTS",
+        message: "This vehicle already has an active trip",
+      },
+    });
+  });
+
+  it("returns a specific conflict when a driver has an active trip", async () => {
+    const app = container();
+    vi.mocked(app.tripService.create).mockRejectedValue(
+      Object.assign(new Error("duplicate key"), {
+        code: "23505",
+        constraint: "trips_driver_active_unique",
+      }),
+    );
+    const request = new Request("http://localhost/api/trips", {
+      method: "POST",
+      body: JSON.stringify({
+        vehicleId: "00000000-0000-4000-8000-000000000002",
+        driverId: "00000000-0000-4000-8000-000000000003",
+        pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
+        dropoff: { address: "Sharjah", lat: 25.3, lng: 55.4 },
+      }),
+    });
+
+    const response = await createTripHandler(request, app);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "DRIVER_ACTIVE_TRIP_EXISTS",
+        message: "This driver already has an active trip",
+      },
+    });
+  });
+
   it("rejects malformed trip payloads", async () => {
     const app = container();
     const request = new Request("http://localhost/api/trips", {
@@ -73,6 +134,24 @@ describe("trip HTTP handlers", () => {
 
     expect(response.status).toBe(200);
     expect(app.tripService.list).toHaveBeenCalledWith("in_transit");
+  });
+
+  it("lists recent positions for an existing trip", async () => {
+    const app = container();
+    vi.mocked(app.tripService.get).mockResolvedValue({
+      trip: { id: tripId },
+    } as never);
+    vi.mocked(app.positionRepository.listRecent).mockResolvedValue([
+      { id: 12, tripId },
+    ] as never);
+
+    const response = await listTripPositionsHandler(tripId, app);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: [{ id: 12, tripId }],
+    });
+    expect(app.positionRepository.listRecent).toHaveBeenCalledWith(tripId);
   });
 
   it("returns a conflict for an invalid lifecycle transition", async () => {

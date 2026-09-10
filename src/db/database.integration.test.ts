@@ -4,7 +4,12 @@ import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./client";
 import { runMigrations } from "./migrate";
-import { resetDatabase, seedDatabase, seedIds } from "./seed";
+import {
+  resetDatabase,
+  seedDatabase,
+  seededVehicles,
+  seedIds,
+} from "./seed";
 import {
   customers,
   drivers,
@@ -61,6 +66,80 @@ describe("database schema", () => {
     expect(vendorCount[0]?.count).toBe(5);
     expect(driverCount[0]?.count).toBe(10);
     expect(tripCount[0]?.count).toBe(1);
+  });
+
+  it("allows only one active trip per vehicle", async () => {
+    for (const [index, status] of ["created", "in_transit"].entries()) {
+      await expect(
+        database.db.insert(trips).values({
+          id: `00000000-0000-4000-9000-00000000000${index + 1}`,
+          referenceNumber: `TRIP-ACTIVE-${index + 1}`,
+          vehicleId: seedIds.vehicle,
+          driverId: seedIds.driver,
+          status: status as "created" | "in_transit",
+          pickupAddress: "Dubai",
+          pickupLatitude: 25.2,
+          pickupLongitude: 55.3,
+          dropoffAddress: "Sharjah",
+          dropoffLatitude: 25.3,
+          dropoffLongitude: 55.4,
+        }),
+      ).rejects.toThrow();
+    }
+
+    await expect(
+      database.db.insert(trips).values({
+        id: "00000000-0000-4000-9000-000000000003",
+        referenceNumber: "TRIP-COMPLETED-1",
+        vehicleId: seedIds.vehicle,
+        driverId: seedIds.driver,
+        status: "completed",
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it("allows only one active trip per driver", async () => {
+    const otherVehicle = seededVehicles[1]!;
+
+    for (const [index, status] of ["created", "in_transit"].entries()) {
+      await expect(
+        database.db.insert(trips).values({
+          id: `00000000-0000-4000-9000-00000000001${index + 1}`,
+          referenceNumber: `TRIP-DRIVER-ACTIVE-${index + 1}`,
+          vehicleId: otherVehicle.id,
+          driverId: seedIds.driver,
+          status: status as "created" | "in_transit",
+          pickupAddress: "Dubai",
+          pickupLatitude: 25.2,
+          pickupLongitude: 55.3,
+          dropoffAddress: "Sharjah",
+          dropoffLatitude: 25.3,
+          dropoffLongitude: 55.4,
+        }),
+      ).rejects.toThrow();
+    }
+
+    await expect(
+      database.db.insert(trips).values({
+        id: "00000000-0000-4000-9000-000000000013",
+        referenceNumber: "TRIP-DRIVER-COMPLETED-1",
+        vehicleId: otherVehicle.id,
+        driverId: seedIds.driver,
+        status: "completed",
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      }),
+    ).resolves.toBeDefined();
   });
 
   it("resets every application table before reseeding", async () => {
@@ -144,11 +223,13 @@ describe("database schema", () => {
     const inserted = await positionRepository.create(input);
     const duplicate = await positionRepository.create(input);
     const latest = await positionRepository.latestForTrips([seedIds.trip]);
+    const recent = await positionRepository.listRecent(seedIds.trip);
     const replay = await positionRepository.listAfter(seedIds.trip, 0);
 
     expect(inserted.created).toBe(true);
     expect(duplicate).toEqual({ position: inserted.position, created: false });
     expect(latest.get(seedIds.trip)?.id).toBe(inserted.position.id);
+    expect(recent[0]?.id).toBe(inserted.position.id);
     expect(replay.map(({ id }) => id)).toContain(inserted.position.id);
   });
 

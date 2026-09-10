@@ -1,24 +1,43 @@
 import { randomUUID } from "node:crypto";
 import { ConflictError } from "@/domain/errors";
 import type { LocationService } from "./location-service";
-import type { TripService } from "./trip-service";
+import type { TripService, TripView } from "./trip-service";
 
-export const demoRoute = [
-  { lat: 25.2048, lng: 55.2708 },
-  { lat: 25.218, lng: 55.286 },
-  { lat: 25.232, lng: 55.301 },
-  { lat: 25.249, lng: 55.319 },
-  { lat: 25.269, lng: 55.34 },
-  { lat: 25.289, lng: 55.361 },
-  { lat: 25.308, lng: 55.383 },
-  { lat: 25.326, lng: 55.402 },
-  { lat: 25.3463, lng: 55.4209 },
-] as const;
+const SIMULATION_POINT_COUNT = 12;
+
+export function buildSimulationRoute(
+  trip: TripView,
+  pointCount = SIMULATION_POINT_COUNT,
+) {
+  const totalPoints = Math.max(2, pointCount);
+  const start = trip.latestPosition
+    ? {
+        lat: trip.latestPosition.latitude,
+        lng: trip.latestPosition.longitude,
+      }
+    : {
+        lat: trip.trip.pickupLatitude,
+        lng: trip.trip.pickupLongitude,
+      };
+  const destination = {
+    lat: trip.trip.dropoffLatitude,
+    lng: trip.trip.dropoffLongitude,
+  };
+
+  return Array.from({ length: totalPoints }, (_, index) => {
+    const progress = index / (totalPoints - 1);
+    return {
+      lat: start.lat + (destination.lat - start.lat) * progress,
+      lng: start.lng + (destination.lng - start.lng) * progress,
+    };
+  });
+}
 
 type Simulation = {
   timer: ReturnType<typeof setInterval>;
   sessionId: string;
   nextPoint: number;
+  route: Array<{ lat: number; lng: number }>;
 };
 
 export class SimulatorService {
@@ -53,6 +72,7 @@ export class SimulatorService {
     const simulation: Simulation = {
       sessionId,
       nextPoint: 0,
+      route: buildSimulationRoute(trip),
       timer: setInterval(() => {
         void this.tick(tripId).catch(() => this.stop(tripId));
       }, intervalMs),
@@ -87,7 +107,7 @@ export class SimulatorService {
     if (!simulation) {
       return;
     }
-    const point = demoRoute[simulation.nextPoint];
+    const point = simulation.route[simulation.nextPoint];
     if (!point) {
       this.stop(tripId);
       await this.trips.transition(tripId, "completed");

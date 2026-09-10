@@ -105,8 +105,9 @@ export function SearchSelect({
         </div>
         <div
           role="listbox"
-          className="max-h-64 overflow-y-auto p-1"
+          className="max-h-64 touch-pan-y overflow-y-auto overscroll-contain p-1"
           aria-label={placeholder}
+          onWheel={(event) => event.stopPropagation()}
         >
           {filtered.length ? (
             filtered.map((option) => (

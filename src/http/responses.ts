@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { DomainError } from "@/domain/errors";
 
-type PostgreSqlError = Error & { code?: string };
+type PostgreSqlError = Error & { code?: string; constraint?: string };
 
 export function errorResponse(error: unknown) {
   if (error instanceof ZodError) {
@@ -39,6 +39,28 @@ export function errorResponse(error: unknown) {
 
   const databaseError = error as PostgreSqlError;
   if (databaseError?.code === "23505") {
+    if (databaseError.constraint === "trips_vehicle_active_unique") {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VEHICLE_ACTIVE_TRIP_EXISTS",
+            message: "This vehicle already has an active trip",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    if (databaseError.constraint === "trips_driver_active_unique") {
+      return NextResponse.json(
+        {
+          error: {
+            code: "DRIVER_ACTIVE_TRIP_EXISTS",
+            message: "This driver already has an active trip",
+          },
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       {
         error: {

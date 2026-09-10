@@ -53,6 +53,20 @@ export async function getTripHandler(id: string, container: AppContainer) {
   }
 }
 
+export async function listTripPositionsHandler(
+  id: string,
+  container: AppContainer,
+) {
+  try {
+    const tripId = idSchema.parse(id);
+    await container.tripService.get(tripId);
+    const positions = await container.positionRepository.listRecent(tripId);
+    return NextResponse.json({ data: positions });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 export async function updateTripHandler(
   id: string,
   request: Request,

@@ -87,7 +87,7 @@ export function TripInspector({
     trip.trip.status === "created" || trip.trip.status === "in_transit";
 
   return (
-    <aside className="min-h-0 overflow-y-auto bg-surface lg:border-l lg:border-border">
+    <aside className="min-h-0 overflow-y-auto bg-surface lg:col-start-1 lg:row-start-1 lg:border-r lg:border-border">
       <div className="border-b border-border p-5">
         {focused ? (
           <Link
@@ -332,7 +332,9 @@ function DetailGroup({
 }) {
   return (
     <section>
-      <h3 className="mb-3 text-xs font-bold text-muted-foreground">{title}</h3>
+      <h3 className="mb-3 text-xs font-semibold text-muted-foreground">
+        {title}
+      </h3>
       <div className="grid gap-3">{children}</div>
     </section>
   );
@@ -355,7 +357,7 @@ function DetailItem({
         {icon}
       </span>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-muted-foreground">
+        <p className="text-xs font-semibold text-muted-foreground">
           {label}
         </p>
         <p className="mt-0.5 text-sm font-medium leading-5">{value}</p>
@@ -372,8 +374,8 @@ function DetailItem({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[10px] bg-muted p-3">
-      <p className="text-[10px] font-semibold text-muted-foreground">{label}</p>
-      <p className="mt-1 break-words text-xs font-semibold leading-5">{value}</p>
+      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold leading-5">{value}</p>
     </div>
   );
 }

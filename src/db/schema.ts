@@ -140,6 +140,12 @@ export const trips = pgTable(
       sql`${table.dropoffLongitude} between -180 and 180`,
     ),
     index("trips_status_updated_at_idx").on(table.status, table.updatedAt),
+    uniqueIndex("trips_vehicle_active_unique")
+      .on(table.vehicleId)
+      .where(sql`${table.status} in ('created', 'in_transit')`),
+    uniqueIndex("trips_driver_active_unique")
+      .on(table.driverId)
+      .where(sql`${table.status} in ('created', 'in_transit')`),
   ],
 );
 
