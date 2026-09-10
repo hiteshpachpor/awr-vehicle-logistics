@@ -49,6 +49,24 @@ Driver:   00000000-0000-4000-8000-000000000004
 Trip:     00000000-0000-4000-8000-000000000005
 ```
 
+### Docker development with hot reload
+
+```bash
+npm run docker:dev
+```
+
+The development override bind-mounts the project into the container, keeps
+container-managed `node_modules` and `.next` volumes, and runs Next.js in
+development mode. Changes under `src` are reflected without rebuilding the
+image. Polling is enabled so file changes are detected reliably by Docker
+Desktop on macOS.
+
+Stop the development stack with:
+
+```bash
+npm run docker:down
+```
+
 Reset all local data:
 
 ```bash
