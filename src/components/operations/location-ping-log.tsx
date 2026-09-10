@@ -3,10 +3,16 @@
 import {
   BroadcastIcon,
   MapPinIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InlineAlert } from "@/components/ui/inline-alert";
 import type { Position } from "@/lib/operations-types";
-import { formatDateTime } from "@/lib/operations-ui";
+import {
+  formatCoordinates,
+  formatDateTime,
+  formatPositionSource,
+  formatSpeed,
+} from "@/lib/operations-ui";
 
 export function LocationPingLog({
   positions,
@@ -51,13 +57,7 @@ export function LocationPingLog({
           ))}
         </div>
       ) : error ? (
-        <div
-          role="alert"
-          className="flex items-start gap-2 p-4 text-sm text-destructive"
-        >
-          <WarningCircleIcon size={18} className="mt-0.5 shrink-0" />
-          {error}
-        </div>
+        <InlineAlert className="m-4">{error}</InlineAlert>
       ) : positions.length ? (
         <ol className="divide-y divide-border/70 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {positions.map((position) => (
@@ -81,13 +81,11 @@ export function LocationPingLog({
               <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-2 tabular-nums">
                   <MapPinIcon size={14} className="shrink-0" />
-                  {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
+                  {formatCoordinates(position.latitude, position.longitude)}
                 </span>
                 <span className="ml-auto flex items-center gap-3">
                   <span className="tabular-nums">
-                  {position.speed === null
-                    ? "—"
-                    : `${position.speed.toFixed(1)} km/h`}
+                  {formatSpeed(position.speed, "—")}
                   </span>
                   <span
                     aria-hidden="true"
@@ -98,7 +96,7 @@ export function LocationPingLog({
                       size={13}
                       className="shrink-0"
                   />
-                  {position.source === "simulator" ? "Simulation" : "Vendor"}
+                  {formatPositionSource(position.source)}
                   </span>
                 </span>
               </div>
@@ -106,16 +104,11 @@ export function LocationPingLog({
           ))}
         </ol>
       ) : (
-        <div className="p-6 text-center">
-          <BroadcastIcon
-            size={24}
-            className="mx-auto text-muted-foreground"
-          />
-          <p className="mt-2 text-sm font-semibold">No location pings yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Reports will appear here when the trip starts moving.
-          </p>
-        </div>
+        <EmptyState
+          icon={<BroadcastIcon />}
+          title="No location pings yet"
+          description="Reports will appear here when the trip starts moving."
+        />
       )}
     </section>
   );

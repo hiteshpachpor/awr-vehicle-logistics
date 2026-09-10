@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   availableTripActions,
   availableTripActionsForRole,
+  formatCoordinates,
   formatDateTime,
+  formatPositionSource,
+  formatSpeed,
+  formatTripRoute,
   getApiErrorMessage,
   matchesTrip,
 } from "./operations-ui";
@@ -65,5 +69,16 @@ describe("operations UI helpers", () => {
 
   it("includes seconds in formatted timestamps", () => {
     expect(formatDateTime("2026-09-10T10:00:05Z")).toMatch(/:05(?:\s|$)/);
+  });
+
+  it("formats position and route values consistently", () => {
+    expect(formatCoordinates(25.204849, 55.270783)).toBe(
+      "25.2048, 55.2708",
+    );
+    expect(formatSpeed(42.37)).toBe("42.4 km/h");
+    expect(formatSpeed(null, "—")).toBe("—");
+    expect(formatPositionSource("simulator")).toBe("Simulation");
+    expect(formatPositionSource("vendor")).toBe("Vendor");
+    expect(formatTripRoute(trip)).toBe("Dubai to Sharjah");
   });
 });

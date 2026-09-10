@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import {
   CircleNotchIcon,
   LinkIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { SearchSelect } from "./search-select";
+import { FormField } from "@/components/ui/form-field";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { Input } from "@/components/ui/input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { getApiErrorMessage } from "@/lib/operations-ui";
 import type {
   ApiErrorBody,
@@ -19,9 +21,6 @@ import type {
   VehicleOption,
   VendorOption,
 } from "@/lib/operations-types";
-
-const inputClass =
-  "h-11 w-full rounded-[10px] border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50";
 
 type FormState = {
   customerId: string;
@@ -209,20 +208,13 @@ export function CreateTripForm() {
   return (
     <form className="grid gap-6" onSubmit={handleSubmit}>
           {optionsError || vehicleError ? (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-[10px] border border-destructive/30 bg-destructive/5 p-3 text-sm"
-            >
-              <WarningCircleIcon
-                size={18}
-                className="mt-0.5 shrink-0 text-destructive"
-              />
+            <InlineAlert>
               {optionsError ?? vehicleError}
-            </div>
+            </InlineAlert>
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Customer" htmlFor="customer-select">
+            <FormField label="Customer" htmlFor="customer-select">
               <SearchSelect
                 id="customer-select"
                 value={form.customerId}
@@ -237,8 +229,8 @@ export function CreateTripForm() {
                 searchPlaceholder="Search customers"
                 disabled={optionsLoading || Boolean(optionsError)}
               />
-            </Field>
-            <Field label="Vehicle" htmlFor="vehicle-select">
+            </FormField>
+            <FormField label="Vehicle" htmlFor="vehicle-select">
               <SearchSelect
                 id="vehicle-select"
                 value={form.vehicleId}
@@ -263,10 +255,10 @@ export function CreateTripForm() {
                   Boolean(vehicleError)
                 }
               />
-            </Field>
+            </FormField>
           </div>
 
-          <Field label="Logistics vendor" htmlFor="vendor-select">
+          <FormField label="Logistics vendor" htmlFor="vendor-select">
             <SearchSelect
               id="vendor-select"
               value={form.vendorId}
@@ -281,17 +273,18 @@ export function CreateTripForm() {
               searchPlaceholder="Search vendors"
               disabled={optionsLoading || Boolean(optionsError)}
             />
-          </Field>
+          </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
+            <FormField
               label="Reference number"
               htmlFor="reference-number"
               helper="Optional. A reference will be generated if left blank."
             >
-              <input
+              <Input
                 id="reference-number"
-                className={inputClass}
+                className="bg-surface"
+                aria-describedby="reference-number-description"
                 value={form.referenceNumber}
                 onChange={(event) =>
                   update("referenceNumber", event.target.value)
@@ -299,20 +292,21 @@ export function CreateTripForm() {
                 maxLength={100}
                 placeholder="TRIP-2026-..."
               />
-            </Field>
-            <Field
+            </FormField>
+            <FormField
               label="Scheduled collection"
               htmlFor="scheduled-at"
               helper="Optional. Times use your current timezone."
             >
-              <input
+              <Input
                 id="scheduled-at"
                 type="datetime-local"
-                className={inputClass}
+                className="bg-surface"
+                aria-describedby="scheduled-at-description"
                 value={form.scheduledAt}
                 onChange={(event) => update("scheduledAt", event.target.value)}
               />
-            </Field>
+            </FormField>
           </div>
 
           <RouteFields
@@ -333,9 +327,16 @@ export function CreateTripForm() {
           />
 
           {submitError ? (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              {submitError}
-            </p>
+            <InlineAlert
+              title="Trip couldn’t be created"
+              className="border-destructive/40 bg-destructive/10 p-4 shadow-[0_6px_18px_rgb(165_29_40/8%)]"
+            >
+              <p>{submitError}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Choose another vehicle or finish its active trip before trying
+                again.
+              </p>
+            </InlineAlert>
           ) : null}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -429,7 +430,7 @@ function RouteFields({
   return (
     <fieldset className="grid gap-4 rounded-xl border border-border p-4">
       <legend className="px-1 text-sm font-semibold">{title}</legend>
-      <Field
+      <FormField
         label="Google Maps link"
         htmlFor={`${prefix}-maps-url`}
         helper="Paste a place link to fill the address and coordinates."
@@ -441,9 +442,9 @@ function RouteFields({
               aria-hidden="true"
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
-            <input
+            <Input
               id={`${prefix}-maps-url`}
-              className={`${inputClass} pl-10`}
+              className="bg-surface pl-10"
               type="text"
               inputMode="url"
               autoComplete="off"
@@ -455,9 +456,9 @@ function RouteFields({
               placeholder="https://maps.app.goo.gl/..."
               disabled={importing}
               aria-invalid={Boolean(importError)}
-              aria-describedby={
-                importError ? `${prefix}-maps-error` : undefined
-              }
+              aria-describedby={`${prefix}-maps-url-description${
+                importError ? ` ${prefix}-maps-error` : ""
+              }`}
             />
           </div>
           <Button
@@ -486,11 +487,11 @@ function RouteFields({
             {importError}
           </p>
         ) : null}
-      </Field>
-      <Field label="Address" htmlFor={`${prefix}-address`}>
-        <input
+      </FormField>
+      <FormField label="Address" htmlFor={`${prefix}-address`}>
+        <Input
           id={`${prefix}-address`}
-          className={inputClass}
+          className="bg-surface"
           required
           maxLength={500}
           value={address}
@@ -499,12 +500,12 @@ function RouteFields({
             prefix === "pickup" ? "Collection address" : "Delivery address"
           }
         />
-      </Field>
+      </FormField>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Latitude" htmlFor={`${prefix}-latitude`}>
-          <input
+        <FormField label="Latitude" htmlFor={`${prefix}-latitude`}>
+          <Input
             id={`${prefix}-latitude`}
-            className={inputClass}
+            className="bg-surface"
             type="number"
             required
             min={-90}
@@ -514,11 +515,11 @@ function RouteFields({
             onChange={(event) => update(latField, event.target.value)}
             placeholder="25.2048"
           />
-        </Field>
-        <Field label="Longitude" htmlFor={`${prefix}-longitude`}>
-          <input
+        </FormField>
+        <FormField label="Longitude" htmlFor={`${prefix}-longitude`}>
+          <Input
             id={`${prefix}-longitude`}
-            className={inputClass}
+            className="bg-surface"
             type="number"
             required
             min={-180}
@@ -528,32 +529,8 @@ function RouteFields({
             onChange={(event) => update(lngField, event.target.value)}
             placeholder="55.2708"
           />
-        </Field>
+        </FormField>
       </div>
     </fieldset>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  helper,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  helper?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <label htmlFor={htmlFor} className="text-sm font-semibold">
-        {label}
-      </label>
-      {children}
-      {helper ? (
-        <p className="text-xs leading-5 text-muted-foreground">{helper}</p>
-      ) : null}
-    </div>
   );
 }

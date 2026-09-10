@@ -88,3 +88,19 @@ export function formatRelativeTime(value: string | null | undefined) {
   }
   return formatter.format(Math.round(minutes / 60), "hour");
 }
+
+export function formatCoordinates(latitude: number, longitude: number) {
+  return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+}
+
+export function formatSpeed(speed: number | null, fallback = "Not reported") {
+  return speed === null ? fallback : `${speed.toFixed(1)} km/h`;
+}
+
+export function formatPositionSource(source: "vendor" | "simulator") {
+  return source === "simulator" ? "Simulation" : "Vendor";
+}
+
+export function formatTripRoute(trip: TripView) {
+  return `${trip.trip.pickupAddress} to ${trip.trip.dropoffAddress}`;
+}

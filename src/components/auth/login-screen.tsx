@@ -6,10 +6,13 @@ import {
   BuildingsIcon,
   ShieldCheckIcon,
   SteeringWheelIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { SearchSelect } from "@/components/operations/search-select";
+import { FormField } from "@/components/ui/form-field";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { Input } from "@/components/ui/input";
+import { LoadingScreen } from "@/components/ui/loading-screen";
+import { SearchSelect } from "@/components/ui/search-select";
 import { useDemoAuth } from "./demo-auth-provider";
 import { getSessionHome, type DemoSession } from "@/lib/demo-auth";
 import { getApiErrorMessage } from "@/lib/operations-ui";
@@ -22,9 +25,6 @@ import { cn } from "@/lib/utils";
 
 type AccountType = "operations" | "vendor";
 type VendorIdentity = "controller" | "driver";
-
-const inputClass =
-  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20";
 
 export function LoginScreen() {
   const router = useRouter();
@@ -158,11 +158,7 @@ export function LoginScreen() {
   }
 
   if (!hydrated || session) {
-    return (
-      <main className="grid min-h-[100dvh] place-items-center bg-background">
-        <p className="text-sm text-muted-foreground">Opening AWR…</p>
-      </main>
-    );
+    return <LoadingScreen message="Opening AWR…" />;
   }
 
   return (
@@ -218,7 +214,7 @@ export function LoginScreen() {
           <div className="mt-6 grid gap-5">
             {accountType === "vendor" ? (
               <>
-                <Field label="Vendor" htmlFor="login-vendor">
+                <FormField label="Vendor" htmlFor="login-vendor">
                   <SearchSelect
                     id="login-vendor"
                     value={vendorId}
@@ -237,7 +233,7 @@ export function LoginScreen() {
                     searchPlaceholder="Search vendors"
                     disabled={loadingOptions && !vendors.length}
                   />
-                </Field>
+                </FormField>
 
                 <fieldset>
                   <legend className="text-sm font-semibold">Sign in as</legend>
@@ -262,7 +258,7 @@ export function LoginScreen() {
                 </fieldset>
 
                 {vendorIdentity === "driver" ? (
-                  <Field label="Driver" htmlFor="login-driver">
+                  <FormField label="Driver" htmlFor="login-driver">
                     <SearchSelect
                       id="login-driver"
                       value={driverId}
@@ -282,34 +278,33 @@ export function LoginScreen() {
                       searchPlaceholder="Search drivers"
                       disabled={!vendorId || loadingOptions}
                     />
-                  </Field>
+                  </FormField>
                 ) : null}
               </>
             ) : null}
 
-            <Field label="Password" htmlFor="login-password">
-              <input
+            <FormField
+              label="Password"
+              htmlFor="login-password"
+              helper={
+                <>
+                  Demo hint: use <strong>password</strong>.
+                </>
+              }
+            >
+              <Input
                 id="login-password"
                 type="password"
                 autoComplete="current-password"
-                className={inputClass}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                aria-describedby="login-password-description"
                 required
               />
-              <p className="text-xs leading-5 text-muted-foreground">
-                Demo hint: use <strong>password</strong>.
-              </p>
-            </Field>
+            </FormField>
 
             {error ? (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-[10px] bg-destructive/8 p-3 text-sm font-medium text-destructive"
-              >
-                <WarningCircleIcon size={18} className="mt-0.5 shrink-0" />
-                {error}
-              </div>
+              <InlineAlert className="font-medium">{error}</InlineAlert>
             ) : null}
 
             <Button
@@ -330,7 +325,6 @@ export function LoginScreen() {
     </main>
   );
 }
-
 function AccountButton({
   active,
   icon,
@@ -357,24 +351,5 @@ function AccountButton({
       {icon}
       {label}
     </button>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <label className="text-sm font-semibold" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

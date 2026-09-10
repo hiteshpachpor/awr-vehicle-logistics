@@ -10,17 +10,16 @@ import {
   SteeringWheelIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SearchSelect } from "@/components/ui/search-select";
 import type {
   DriverOption,
   TripStatus,
   TripView,
 } from "@/lib/operations-types";
-import {
-  formatRelativeTime,
-  tripStatusLabels,
-} from "@/lib/operations-ui";
+import { formatRelativeTime } from "@/lib/operations-ui";
 import { cn } from "@/lib/utils";
-import { SearchSelect } from "./search-select";
+import { TripStatusBadge } from "./trip-status-badge";
 
 const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -154,7 +153,7 @@ export function TripQueue({
                   </span>
 
                   <span className="flex items-center justify-between gap-3">
-                    <StatusBadge status={trip.trip.status} />
+                    <TripStatusBadge status={trip.trip.status} />
                     <CaretRightIcon
                       size={16}
                       className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
@@ -173,18 +172,12 @@ export function TripQueue({
             ))}
           </ul>
         ) : (
-          <div className="grid min-h-56 place-items-center p-6 text-center">
-            <div>
-              <CarIcon
-                size={28}
-                className="mx-auto mb-3 text-muted-foreground"
-              />
-              <p className="text-sm font-semibold">No matching trips</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Change the filter or create a new trip.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            className="min-h-56"
+            icon={<CarIcon />}
+            title="No matching trips"
+            description="Change the filter or create a new trip."
+          />
         )}
         </div>
       </div>
@@ -254,26 +247,6 @@ function DriverAssignment({
         </Button>
       </div>
     </div>
-  );
-}
-
-export function StatusBadge({ status }: { status: TripStatus }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold",
-        status === "in_transit" &&
-          "border-status-transit/30 bg-status-transit/10 text-status-transit",
-        status === "created" &&
-          "border-status-scheduled/30 bg-status-scheduled/10 text-status-scheduled",
-        status === "completed" &&
-          "border-status-completed/30 bg-status-completed/10 text-status-completed",
-        status === "cancelled" &&
-          "border-status-cancelled/30 bg-status-cancelled/10 text-status-cancelled",
-      )}
-    >
-      {tripStatusLabels[status]}
-    </span>
   );
 }
 

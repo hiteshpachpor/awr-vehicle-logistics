@@ -11,7 +11,6 @@ import {
   MapPinIcon,
   PlayIcon,
   UserIcon,
-  WarningCircleIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import {
@@ -26,15 +25,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InlineAlert } from "@/components/ui/inline-alert";
 import type { DriverLocationStatus } from "@/hooks/use-driver-location";
 import type { StreamStatus } from "@/hooks/use-trip-events";
 import type { TripStatus, TripView } from "@/lib/operations-types";
 import {
   availableTripActionsForRole,
+  formatCoordinates,
   formatDateTime,
+  formatPositionSource,
   formatRelativeTime,
+  formatSpeed,
 } from "@/lib/operations-ui";
-import { StatusBadge } from "./trip-queue";
+import { TripStatusBadge } from "./trip-status-badge";
 
 const streamLabels: Record<StreamStatus, string> = {
   idle: "Not connected",
@@ -77,14 +81,13 @@ export function TripInspector({
 
   if (!trip) {
     return (
-      <aside className="grid min-h-72 place-items-center bg-surface p-8 text-center lg:border-l lg:border-border">
-        <div className="max-w-xs">
-          <CarIcon size={28} className="mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No trip selected</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Choose a trip to review its assignment and current status.
-          </p>
-        </div>
+      <aside className="min-h-72 bg-surface lg:border-l lg:border-border">
+        <EmptyState
+          className="h-full min-h-72 p-8"
+          icon={<CarIcon />}
+          title="No trip selected"
+          description="Choose a trip to review its assignment and current status."
+        />
       </aside>
     );
   }
@@ -111,7 +114,7 @@ export function TripInspector({
               {trip.vehicle.registrationNumber}
             </p>
           </div>
-          <StatusBadge status={trip.trip.status} />
+          <TripStatusBadge status={trip.trip.status} />
         </div>
         <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
           <BroadcastIcon
@@ -183,13 +186,9 @@ export function TripInspector({
             </div>
 
             {mutationError ? (
-              <div
-                role="alert"
-                className="mt-3 flex items-start gap-2 text-sm font-medium text-destructive"
-              >
-                <WarningCircleIcon size={18} className="mt-0.5 shrink-0" />
+              <InlineAlert className="mt-3 font-medium">
                 {mutationError}
-              </div>
+              </InlineAlert>
             ) : null}
           </DetailGroup>
         ) : null}
@@ -228,13 +227,19 @@ export function TripInspector({
             icon={<MapPinIcon />}
             label="Pickup"
             value={trip.trip.pickupAddress}
-            detail={`${trip.trip.pickupLatitude.toFixed(4)}, ${trip.trip.pickupLongitude.toFixed(4)}`}
+            detail={formatCoordinates(
+              trip.trip.pickupLatitude,
+              trip.trip.pickupLongitude,
+            )}
           />
           <DetailItem
             icon={<MapPinIcon />}
             label="Dropoff"
             value={trip.trip.dropoffAddress}
-            detail={`${trip.trip.dropoffLatitude.toFixed(4)}, ${trip.trip.dropoffLongitude.toFixed(4)}`}
+            detail={formatCoordinates(
+              trip.trip.dropoffLatitude,
+              trip.trip.dropoffLongitude,
+            )}
           />
           <DetailItem
             icon={<CalendarBlankIcon />}
@@ -248,23 +253,18 @@ export function TripInspector({
             <div className="grid grid-cols-2 gap-3">
               <Metric
                 label="Coordinates"
-                value={`${trip.latestPosition.latitude.toFixed(4)}, ${trip.latestPosition.longitude.toFixed(4)}`}
+                value={formatCoordinates(
+                  trip.latestPosition.latitude,
+                  trip.latestPosition.longitude,
+                )}
               />
               <Metric
                 label="Speed"
-                value={
-                  trip.latestPosition.speed === null
-                    ? "Not reported"
-                    : `${trip.latestPosition.speed.toFixed(1)} km/h`
-                }
+                value={formatSpeed(trip.latestPosition.speed)}
               />
               <Metric
                 label="Source"
-                value={
-                  trip.latestPosition.source === "simulator"
-                    ? "Simulation"
-                    : "Vendor"
-                }
+                value={formatPositionSource(trip.latestPosition.source)}
               />
               <Metric
                 label="Recorded"

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MapPinLineIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { MapPinLineIcon } from "@phosphor-icons/react";
 import mapboxgl from "mapbox-gl";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InlineAlert } from "@/components/ui/inline-alert";
 import type { TripView } from "@/lib/operations-types";
 
 const markerIconPaths = {
@@ -147,18 +149,12 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
 
   if (!token) {
     return (
-      <div className="grid h-full min-h-72 place-items-center bg-surface-strong p-8 text-center">
-        <div className="max-w-sm">
-          <MapPinLineIcon
-            size={28}
-            className="mx-auto mb-3 text-primary"
-          />
-          <p className="font-semibold">Mapbox token required</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN to display live trip maps.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        className="h-full min-h-72 bg-surface-strong p-8"
+        icon={<MapPinLineIcon className="text-primary" />}
+        title="Mapbox token required"
+        description="Add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN to display live trip maps."
+      />
     );
   }
 
@@ -166,30 +162,17 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
     <div className="relative h-full min-h-72 bg-surface-strong">
       <div ref={containerRef} className="h-full w-full" />
       {!trip ? (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-background/70 p-8 text-center backdrop-blur-sm">
-          <div>
-            <MapPinLineIcon
-              size={28}
-              className="mx-auto mb-3 text-muted-foreground"
-            />
-            <p className="font-semibold">Select a trip</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Pickup, drop-off, and live vehicle position will appear here.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          className="pointer-events-none absolute inset-0 bg-background/70 p-8 backdrop-blur-sm"
+          icon={<MapPinLineIcon />}
+          title="Select a trip"
+          description="Pickup, drop-off, and live vehicle position will appear here."
+        />
       ) : null}
       {mapError ? (
-        <div
-          role="alert"
-          className="absolute bottom-4 left-4 right-4 flex items-start gap-2 rounded-[10px] border border-destructive/30 bg-background/95 p-3 text-sm shadow-lg"
-        >
-          <WarningCircleIcon
-            size={18}
-            className="mt-0.5 shrink-0 text-destructive"
-          />
+        <InlineAlert className="absolute bottom-4 left-4 right-4 bg-background/95 shadow-lg">
           {mapError}
-        </div>
+        </InlineAlert>
       ) : null}
     </div>
   );

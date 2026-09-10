@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDemoAuth } from "./demo-auth-provider";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 import { getSessionHome } from "@/lib/demo-auth";
 
 export function RouteGuard({
@@ -39,11 +40,7 @@ export function RouteGuard({
   }, [allowed, hydrated, router, session]);
 
   if (!hydrated || !session || !allowed) {
-    return (
-      <main className="grid min-h-[100dvh] place-items-center bg-background">
-        <p className="text-sm text-muted-foreground">Opening workspace…</p>
-      </main>
-    );
+    return <LoadingScreen message="Opening workspace…" />;
   }
 
   return children;

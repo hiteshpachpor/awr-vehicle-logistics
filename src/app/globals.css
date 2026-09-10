@@ -13,6 +13,8 @@
   --primary: #b4232c;
   --primary-foreground: #fffafa;
   --destructive: #a51d28;
+  --destructive-foreground: #fffafa;
+  --overlay: #181719;
   --ring: #b4232c;
   --status-scheduled: #175cd3;
   --status-transit: #934f00;
@@ -36,6 +38,8 @@
     --primary: #d64a52;
     --primary-foreground: #fffafa;
     --destructive: #c93b46;
+    --destructive-foreground: #fffafa;
+    --overlay: #09090b;
     --ring: #e05a62;
     --status-scheduled: #84adff;
     --status-transit: #fec84b;
@@ -58,6 +62,8 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-overlay: var(--overlay);
   --color-ring: var(--ring);
   --color-status-scheduled: var(--status-scheduled);
   --color-status-transit: var(--status-transit);

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-type Option = {
+export type SearchSelectOption = {
   value: string;
   label: string;
   description?: string;
@@ -33,7 +33,7 @@ export function SearchSelect({
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  options: Option[];
+  options: SearchSelectOption[];
   placeholder: string;
   searchPlaceholder: string;
   id?: string;
@@ -43,11 +43,11 @@ export function SearchSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selected = options.find((option) => option.value === value);
+  const listboxId = id ? `${id}-listbox` : undefined;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) {
-      return options;
-    }
+    if (!normalized) return options;
+
     return options.filter((option) =>
       [option.label, option.description, option.searchText]
         .filter(Boolean)
@@ -69,10 +69,12 @@ export function SearchSelect({
           type="button"
           variant="secondary"
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
+          aria-haspopup="listbox"
           className={cn(
             "w-full justify-between px-3 text-left font-normal",
-            triggerClassName ? triggerClassName : "h-auto min-h-11 py-2",
+            triggerClassName ?? "h-auto min-h-11 py-2",
           )}
           disabled={disabled}
         >
@@ -91,24 +93,30 @@ export function SearchSelect({
               </span>
             ) : null}
           </span>
-          <CaretUpDownIcon className="shrink-0 text-muted-foreground" />
+          <CaretUpDownIcon
+            aria-hidden="true"
+            className="shrink-0 text-muted-foreground"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0">
         <div className="flex items-center gap-2 border-b border-border px-3">
           <MagnifyingGlassIcon
             size={16}
+            aria-hidden="true"
             className="shrink-0 text-muted-foreground"
           />
           <input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
             className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div
+          id={listboxId}
           role="listbox"
           className="max-h-64 touch-pan-y overflow-y-auto overscroll-contain p-1"
           aria-label={placeholder}
@@ -130,6 +138,7 @@ export function SearchSelect({
                 <CheckIcon
                   size={16}
                   weight="bold"
+                  aria-hidden="true"
                   className={cn(
                     "mt-0.5 shrink-0",
                     option.value === value ? "opacity-100" : "opacity-0",
