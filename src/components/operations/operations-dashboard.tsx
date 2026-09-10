@@ -71,6 +71,7 @@ export function OperationsDashboard({
   const [positionLog, setPositionLog] = useState<Position[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(focused);
   const [positionsError, setPositionsError] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"map" | "locations">("map");
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
@@ -177,16 +178,12 @@ export function OperationsDashboard({
   useEffect(() => {
     if (
       focused ||
-      !session ||
-      session.role === "driver" ||
+      session?.role !== "controller" ||
       drivers.length
     ) {
       return;
     }
-    const query =
-      session.role === "controller"
-        ? `?vendorId=${encodeURIComponent(session.vendorId)}`
-        : "";
+    const query = `?vendorId=${encodeURIComponent(session.vendorId)}`;
     void fetch(`/api/drivers${query}`, { cache: "no-store" })
       .then(async (response) => {
         const body = (await response.json()) as
@@ -385,6 +382,18 @@ export function OperationsDashboard({
       : session?.role === "controller"
         ? session.vendorName
         : (session?.driverName ?? "Driver trips");
+  const workspaceMark =
+    session?.role === "controller"
+      ? getInitials(session.vendorName)
+      : session?.role === "driver"
+        ? getInitials(session.driverName)
+        : "AWR";
+  const workspaceMarkColor =
+    session?.role === "controller"
+      ? "bg-role-controller text-role-mark-foreground"
+      : session?.role === "driver"
+        ? "bg-role-driver text-role-mark-foreground"
+        : "bg-primary text-primary-foreground";
   const homeLinkHref =
     session?.role === "driver" &&
     selectedTrip?.trip.status === "in_transit"
@@ -399,8 +408,10 @@ export function OperationsDashboard({
           aria-label="Go to trips index"
           className="flex min-w-0 items-center gap-3 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="grid h-9 min-w-12 place-items-center rounded-[10px] bg-primary px-2 text-sm font-semibold tracking-tight text-primary-foreground">
-            AWR
+          <span
+            className={`grid h-9 min-w-12 place-items-center rounded-[10px] px-2 text-sm font-semibold tracking-tight ${workspaceMarkColor}`}
+          >
+            {workspaceMark}
           </span>
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">
@@ -413,6 +424,7 @@ export function OperationsDashboard({
                   {lastRefresh.toLocaleTimeString("en-AE", {
                     hour: "2-digit",
                     minute: "2-digit",
+                    second: "2-digit",
                   })}
                 </time>
               </p>
@@ -474,33 +486,72 @@ export function OperationsDashboard({
       ) : (
         focused ? (
           <div className="grid min-h-0 flex-1 lg:grid-cols-[380px_minmax(0,1fr)]">
-            <div className="grid min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:grid-rows-[minmax(360px,3fr)_minmax(260px,2fr)]">
-              <section className="flex min-h-[420px] min-w-0 flex-col border-b border-border lg:min-h-0">
-                <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border bg-surface px-4">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-sm font-semibold">
-                      {selectedTrip
-                        ? `${selectedTrip.trip.pickupAddress} to ${selectedTrip.trip.dropoffAddress}`
-                        : "Live trip map"}
-                    </h2>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MapPinIcon size={13} />
-                      {selectedTrip?.latestPosition
-                        ? "Showing latest reported position"
-                        : "Showing pickup and drop-off locations"}
-                    </p>
-                  </div>
-                </div>
-                <div className="min-h-72 flex-1">
-                  <OperationsMap trip={selectedTrip} />
-                </div>
-              </section>
+            <div className="flex min-w-0 flex-col bg-surface lg:col-start-2 lg:row-start-1 lg:min-h-0">
+              <div
+                role="tablist"
+                aria-label="Trip tracking view"
+                className="flex h-12 shrink-0 items-end gap-5 border-b border-border px-4"
+              >
+                {(["map", "locations"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    id={`trip-${tab}-tab`}
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === tab}
+                    aria-controls={`trip-${tab}-panel`}
+                    onClick={() => setDetailTab(tab)}
+                    className={`relative h-full px-1 text-sm font-semibold outline-none transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:ring-2 focus-visible:ring-ring ${
+                      detailTab === tab
+                        ? "text-foreground after:bg-primary"
+                        : "text-muted-foreground after:bg-transparent hover:text-foreground"
+                    }`}
+                  >
+                    {tab === "map" ? "Map" : `Location pings (${positionLog.length})`}
+                  </button>
+                ))}
+              </div>
 
-              <LocationPingLog
-                positions={positionLog}
-                loading={positionsLoading}
-                error={positionsError}
-              />
+              {detailTab === "map" ? (
+                <section
+                  id="trip-map-panel"
+                  role="tabpanel"
+                  aria-labelledby="trip-map-tab"
+                  className="flex min-h-[420px] min-w-0 flex-1 flex-col lg:min-h-0"
+                >
+                  <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border px-4">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-sm font-semibold">
+                        {selectedTrip
+                          ? `${selectedTrip.trip.pickupAddress} to ${selectedTrip.trip.dropoffAddress}`
+                          : "Live trip map"}
+                      </h2>
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPinIcon size={13} />
+                        {selectedTrip?.latestPosition
+                          ? "Showing latest reported position"
+                          : "Showing pickup and drop-off locations"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="min-h-72 flex-1">
+                    <OperationsMap trip={selectedTrip} />
+                  </div>
+                </section>
+              ) : (
+                <div
+                  id="trip-locations-panel"
+                  role="tabpanel"
+                  aria-labelledby="trip-locations-tab"
+                  className="flex min-h-0 flex-1 flex-col"
+                >
+                  <LocationPingLog
+                    positions={positionLog}
+                    loading={positionsLoading}
+                    error={positionsError}
+                  />
+                </div>
+              )}
             </div>
 
             <TripInspector
@@ -526,15 +577,9 @@ export function OperationsDashboard({
               onFilterChange={setFilter}
               counts={counts}
               loading={loading}
-              drivers={
-                session?.role === "operations" ||
-                session?.role === "controller"
-                  ? drivers
-                  : undefined
-              }
+              drivers={session?.role === "controller" ? drivers : undefined}
               assigningTripId={assigningTripId}
               onAssignDriver={
-                session?.role === "operations" ||
                 session?.role === "controller"
                   ? (tripId, selectedDriverId) =>
                       void assignDriver(tripId, selectedDriverId)
@@ -571,6 +616,17 @@ export function OperationsDashboard({
       ) : null}
     </main>
   );
+}
+
+function getInitials(name: string | undefined) {
+  const initials = name
+    ?.trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  return initials || "LV";
 }
 
 function mergePositions(...groups: Position[][]) {

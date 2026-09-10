@@ -29,6 +29,7 @@ export function SearchSelect({
   searchPlaceholder,
   id,
   disabled,
+  triggerClassName,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -37,6 +38,7 @@ export function SearchSelect({
   searchPlaceholder: string;
   id?: string;
   disabled?: boolean;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -68,7 +70,10 @@ export function SearchSelect({
           variant="secondary"
           role="combobox"
           aria-expanded={open}
-          className="h-auto min-h-11 w-full justify-between px-3 py-2 text-left font-normal"
+          className={cn(
+            "w-full justify-between px-3 text-left font-normal",
+            triggerClassName ? triggerClassName : "h-auto min-h-11 py-2",
+          )}
           disabled={disabled}
         >
           <span className="min-w-0">

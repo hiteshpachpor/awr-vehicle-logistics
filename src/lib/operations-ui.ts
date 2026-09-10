@@ -1,7 +1,7 @@
 import type { ApiErrorBody, TripStatus, TripView } from "./operations-types";
 
 export const tripStatusLabels: Record<TripStatus, string> = {
-  created: "Ready",
+  created: "Scheduled",
   in_transit: "In transit",
   completed: "Completed",
   cancelled: "Cancelled",
@@ -69,7 +69,7 @@ export function formatDateTime(value: string | null | undefined) {
   }
   return new Intl.DateTimeFormat("en-AE", {
     dateStyle: "medium",
-    timeStyle: "short",
+    timeStyle: "medium",
   }).format(new Date(value));
 }
 

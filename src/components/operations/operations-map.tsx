@@ -26,10 +26,10 @@ function markerElement(kind: "pickup" | "dropoff" | "vehicle") {
   );
   element.className =
     kind === "vehicle"
-      ? "grid size-8 place-items-center rounded-[10px] border-2 border-[#fffafa] bg-primary text-primary-foreground shadow-[0_5px_16px_rgba(122,26,34,.38)] transition-transform duration-500"
+      ? "relative grid size-8 place-items-center rounded-[10px] border-2 border-[#fffafa] bg-primary text-primary-foreground shadow-[0_5px_16px_rgba(122,26,34,.38)] transition-transform duration-500"
       : kind === "pickup"
-        ? "grid size-7 place-items-center rounded-full border-2 border-[#fffafa] bg-background text-foreground shadow-[0_4px_12px_rgb(20_22_26/30%)]"
-        : "grid size-7 place-items-center rounded-full border-2 border-[#fffafa] bg-foreground text-background shadow-[0_4px_12px_rgb(20_22_26/30%)]";
+        ? "relative grid size-7 place-items-center rounded-full border-2 border-[#fffafa] bg-background text-foreground shadow-[0_4px_12px_rgb(20_22_26/30%)]"
+        : "relative grid size-7 place-items-center rounded-full border-2 border-[#fffafa] bg-foreground text-background shadow-[0_4px_12px_rgb(20_22_26/30%)]";
 
   const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   icon.setAttribute("viewBox", "0 0 256 256");
@@ -40,6 +40,15 @@ function markerElement(kind: "pickup" | "dropoff" | "vehicle") {
   path.setAttribute("fill", "currentColor");
   icon.append(path);
   element.append(icon);
+
+  if (kind !== "vehicle") {
+    const label = document.createElement("span");
+    label.className =
+      "pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-1 text-[11px] font-semibold text-foreground shadow-[0_4px_12px_rgb(20_22_26/20%)]";
+    label.textContent = kind === "pickup" ? "Pickup" : "Drop-off";
+    element.append(label);
+  }
+
   return element;
 }
 
@@ -126,7 +135,7 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
       bounds.extend(dropoff);
       if (current) bounds.extend(current);
       map.fitBounds(bounds, {
-        padding: { top: 64, right: 64, bottom: 64, left: 64 },
+        padding: { top: 88, right: 88, bottom: 88, left: 88 },
         maxZoom: 13,
         duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
           ? 0

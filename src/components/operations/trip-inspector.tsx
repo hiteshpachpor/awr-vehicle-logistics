@@ -105,7 +105,7 @@ export function TripInspector({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold tracking-tight">
-              {trip.trip.referenceNumber}
+              {trip.customer.name}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {trip.vehicle.registrationNumber}
@@ -132,6 +132,68 @@ export function TripInspector({
       </div>
 
       <div className="grid gap-6 p-5">
+        {actions.length ? (
+          <DetailGroup title="Trip controls">
+            <div className="grid grid-cols-2 gap-2">
+              {actions.includes("start") ? (
+                <Button
+                  disabled={mutating}
+                  onClick={() => onTransition("in_transit")}
+                >
+                  <PlayIcon weight="fill" />
+                  Start trip
+                </Button>
+              ) : null}
+              {actions.includes("complete") ? (
+                <Button
+                  disabled={mutating}
+                  onClick={() => onTransition("completed")}
+                >
+                  <CheckCircleIcon weight="bold" />
+                  End trip
+                </Button>
+              ) : null}
+              {actions.includes("cancel") ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="secondary" disabled={mutating}>
+                      <XCircleIcon />
+                      Cancel trip
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this trip?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This ends the trip and prevents future location updates.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep trip</AlertDialogCancel>
+                      <AlertDialogAction
+                        destructive
+                        onClick={() => onTransition("cancelled")}
+                      >
+                        Cancel trip
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : null}
+            </div>
+
+            {mutationError ? (
+              <div
+                role="alert"
+                className="mt-3 flex items-start gap-2 text-sm font-medium text-destructive"
+              >
+                <WarningCircleIcon size={18} className="mt-0.5 shrink-0" />
+                {mutationError}
+              </div>
+            ) : null}
+          </DetailGroup>
+        ) : null}
+
         <DetailGroup title="Assignment">
           <DetailItem
             icon={<CarIcon />}
@@ -240,67 +302,6 @@ export function TripInspector({
           </DetailGroup>
         ) : null}
 
-        {actions.length ? (
-          <DetailGroup title="Trip controls">
-            <div className="grid grid-cols-2 gap-2">
-              {actions.includes("start") ? (
-                <Button
-                  disabled={mutating}
-                  onClick={() => onTransition("in_transit")}
-                >
-                  <PlayIcon weight="fill" />
-                  Start trip
-                </Button>
-              ) : null}
-              {actions.includes("complete") ? (
-                <Button
-                  disabled={mutating}
-                  onClick={() => onTransition("completed")}
-                >
-                  <CheckCircleIcon weight="bold" />
-                  End trip
-                </Button>
-              ) : null}
-              {actions.includes("cancel") ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="secondary" disabled={mutating}>
-                      <XCircleIcon />
-                      Cancel trip
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Cancel this trip?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This ends the trip and prevents future location updates.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep trip</AlertDialogCancel>
-                      <AlertDialogAction
-                        destructive
-                        onClick={() => onTransition("cancelled")}
-                      >
-                        Cancel trip
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              ) : null}
-            </div>
-
-            {mutationError ? (
-              <div
-                role="alert"
-                className="mt-3 flex items-start gap-2 text-sm font-medium text-destructive"
-              >
-                <WarningCircleIcon size={18} className="mt-0.5 shrink-0" />
-                {mutationError}
-              </div>
-            ) : null}
-          </DetailGroup>
-        ) : null}
       </div>
     </aside>
   );

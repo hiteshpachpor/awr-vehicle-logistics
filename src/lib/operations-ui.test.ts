@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   availableTripActions,
   availableTripActionsForRole,
+  formatDateTime,
   getApiErrorMessage,
   matchesTrip,
 } from "./operations-ui";
@@ -60,5 +61,9 @@ describe("operations UI helpers", () => {
         },
       }),
     ).toBe("Latitude must be at most 90");
+  });
+
+  it("includes seconds in formatted timestamps", () => {
+    expect(formatDateTime("2026-09-10T10:00:05Z")).toMatch(/:05(?:\s|$)/);
   });
 });

@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   CaretRightIcon,
+  CarIcon,
   MagnifyingGlassIcon,
   MapPinIcon,
-  TruckIcon,
+  SteeringWheelIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import type {
@@ -23,7 +24,7 @@ import { SearchSelect } from "./search-select";
 
 const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "all", label: "All" },
-  { value: "created", label: "Ready" },
+  { value: "created", label: "Scheduled" },
   { value: "in_transit", label: "In transit" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
@@ -112,17 +113,25 @@ export function TripQueue({
         ) : trips.length ? (
           <ul className="grid gap-1">
             {trips.map((trip) => (
-              <li key={trip.trip.id}>
+              <li
+                key={trip.trip.id}
+                className={cn(
+                  "overflow-hidden rounded-[10px] border border-transparent transition-colors hover:border-border",
+                  onAssignDriver &&
+                    trip.trip.status === "created" &&
+                    "border-border",
+                )}
+              >
                 <Link
                   href={`/trips/${trip.trip.id}`}
-                  className="group grid gap-4 rounded-[10px] border border-transparent px-3 py-4 outline-none transition-colors hover:border-border hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-ring lg:grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] lg:items-center lg:gap-5 lg:px-3 lg:py-3"
+                  className="group grid gap-4 px-3 py-4 outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] lg:items-center lg:gap-5 lg:px-3 lg:py-3"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold">
-                      {trip.trip.referenceNumber}
+                      {trip.customer.name}
                     </span>
                     <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <TruckIcon size={14} className="shrink-0" />
+                      <CarIcon size={14} className="shrink-0" />
                       {trip.vehicle.registrationNumber}
                     </span>
                   </span>
@@ -166,7 +175,7 @@ export function TripQueue({
         ) : (
           <div className="grid min-h-56 place-items-center p-6 text-center">
             <div>
-              <TruckIcon
+              <CarIcon
                 size={28}
                 className="mx-auto mb-3 text-muted-foreground"
               />
@@ -200,11 +209,20 @@ function DriverAssignment({
   );
 
   return (
-    <div className="mx-3 mb-3 grid gap-2 rounded-[10px] bg-muted/55 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-      <div className="grid gap-1.5">
-        <span className="text-xs font-semibold text-muted-foreground">
-          Driver assignment · {trip.vendor.name}
+    <div className="flex flex-col gap-3 border-t border-border bg-background p-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <SteeringWheelIcon size={18} />
         </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold">Assign driver</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            {trip.vendor.name}
+          </span>
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-col gap-2 sm:w-[360px] sm:flex-row">
+        <div className="min-w-0 flex-1">
         <SearchSelect
           value={driverId}
           onValueChange={setDriverId}
@@ -219,20 +237,22 @@ function DriverAssignment({
           }
           searchPlaceholder="Search drivers"
           disabled={assigning || !vendorDrivers.length}
+          triggerClassName="h-11 min-h-11 py-1"
         />
+        </div>
+        <Button
+          type="button"
+          className="h-11 shrink-0"
+          disabled={!driverId || assigning || driverId === trip.driver?.id}
+          onClick={() => onAssign(trip.trip.id, driverId)}
+        >
+          {assigning
+            ? "Saving…"
+            : trip.driver
+              ? "Update"
+              : "Assign"}
+        </Button>
       </div>
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={!driverId || assigning || driverId === trip.driver?.id}
-        onClick={() => onAssign(trip.trip.id, driverId)}
-      >
-        {assigning
-          ? "Assigning…"
-          : trip.driver
-            ? "Update driver"
-            : "Assign driver"}
-      </Button>
     </div>
   );
 }
@@ -243,13 +263,13 @@ export function StatusBadge({ status }: { status: TripStatus }) {
       className={cn(
         "shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold",
         status === "in_transit" &&
-          "border-primary/25 bg-primary/10 text-primary",
+          "border-status-transit/30 bg-status-transit/10 text-status-transit",
         status === "created" &&
-          "border-border bg-background text-foreground",
+          "border-status-scheduled/30 bg-status-scheduled/10 text-status-scheduled",
         status === "completed" &&
-          "border-foreground/20 bg-foreground/7 text-foreground",
+          "border-status-completed/30 bg-status-completed/10 text-status-completed",
         status === "cancelled" &&
-          "border-border bg-muted text-muted-foreground",
+          "border-status-cancelled/30 bg-status-cancelled/10 text-status-cancelled",
       )}
     >
       {tripStatusLabels[status]}

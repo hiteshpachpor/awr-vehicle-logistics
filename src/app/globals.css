@@ -14,6 +14,13 @@
   --primary-foreground: #fffafa;
   --destructive: #a51d28;
   --ring: #b4232c;
+  --status-scheduled: #175cd3;
+  --status-transit: #934f00;
+  --status-completed: #067647;
+  --status-cancelled: #b42318;
+  --role-controller: #175cd3;
+  --role-driver: #067647;
+  --role-mark-foreground: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,6 +37,13 @@
     --primary-foreground: #fffafa;
     --destructive: #c93b46;
     --ring: #e05a62;
+    --status-scheduled: #84adff;
+    --status-transit: #fec84b;
+    --status-completed: #75e0a7;
+    --status-cancelled: #fda29b;
+    --role-controller: #2f6edb;
+    --role-driver: #087a4a;
+    --role-mark-foreground: #ffffff;
   }
 }
 
@@ -45,6 +59,13 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
   --color-ring: var(--ring);
+  --color-status-scheduled: var(--status-scheduled);
+  --color-status-transit: var(--status-transit);
+  --color-status-completed: var(--status-completed);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-role-controller: var(--role-controller);
+  --color-role-driver: var(--role-driver);
+  --color-role-mark-foreground: var(--role-mark-foreground);
 }
 
 * {
