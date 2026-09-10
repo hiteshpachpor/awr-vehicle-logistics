@@ -34,7 +34,12 @@ This starts PostgreSQL, waits for it to become healthy, applies migrations,
 loads deterministic demo data, and starts the application on
 <http://localhost:3000>.
 
-Demo identifiers:
+The seed contains 30 fictional UAE vehicle owners, one vehicle per owner, five
+imaginary logistics vendors, ten drivers, and a ready-to-start trip. Vehicle
+volume follows the requested distribution: Nissan 12, INFINITI 7, Renault 5,
+Chery 4, and Zeekr 2.
+
+Primary seeded identifiers:
 
 ```text
 Customer: 00000000-0000-4000-8000-000000000001

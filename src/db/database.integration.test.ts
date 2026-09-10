@@ -5,7 +5,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./client";
 import { runMigrations } from "./migrate";
 import { seedDatabase, seedIds } from "./seed";
-import { customers, tripPositions, trips } from "./schema";
+import {
+  customers,
+  drivers,
+  logisticsVendors,
+  tripPositions,
+  trips,
+  vehicles,
+} from "./schema";
 import { PositionRepository } from "@/repositories/position-repository";
 import { TripRepository } from "@/repositories/trip-repository";
 import {
@@ -38,8 +45,20 @@ describe("database schema", () => {
     const tripCount = await database.db
       .select({ count: sql<number>`count(*)::int` })
       .from(trips);
+    const vehicleCount = await database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles);
+    const vendorCount = await database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(logisticsVendors);
+    const driverCount = await database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(drivers);
 
-    expect(customerCount[0]?.count).toBe(1);
+    expect(customerCount[0]?.count).toBe(30);
+    expect(vehicleCount[0]?.count).toBe(30);
+    expect(vendorCount[0]?.count).toBe(5);
+    expect(driverCount[0]?.count).toBe(10);
     expect(tripCount[0]?.count).toBe(1);
   });
 
