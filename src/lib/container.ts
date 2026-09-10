@@ -1,8 +1,10 @@
 import { getEnvironment } from "@/config/env";
 import { getDatabase } from "@/db/client";
+import { OperationsRepository } from "@/repositories/operations-repository";
 import { PositionRepository } from "@/repositories/position-repository";
 import { TripRepository } from "@/repositories/trip-repository";
 import { LocationService } from "@/services/location-service";
+import { OperationsService } from "@/services/operations-service";
 import {
   PostgresPositionEventSource,
   PostgresPositionPublisher,
@@ -14,7 +16,9 @@ function buildContainer() {
   const { db, pool } = getDatabase();
   const tripRepository = new TripRepository(db);
   const positionRepository = new PositionRepository(db);
+  const operationsRepository = new OperationsRepository(db);
   const tripService = new TripService(tripRepository, positionRepository);
+  const operationsService = new OperationsService(operationsRepository);
   const positionPublisher = new PostgresPositionPublisher(pool);
   const locationService = new LocationService(
     tripService,
@@ -28,6 +32,7 @@ function buildContainer() {
 
   return {
     tripService,
+    operationsService,
     locationService,
     positionRepository,
     positionEvents,

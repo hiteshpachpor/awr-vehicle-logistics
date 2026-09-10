@@ -16,9 +16,13 @@ services:
       retries: 15
 
   application:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: ${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:-}
     environment:
       DATABASE_URL: postgres://awr:awr@database:5432/awr
+      NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: ${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:-}
       PORT: 3000
     ports:
       - "3000:3000"

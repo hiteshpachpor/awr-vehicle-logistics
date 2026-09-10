@@ -13,6 +13,8 @@ CMD ["sh", "-c", "npm run db:migrate && npm run db:seed && npm run dev -- --host
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
+ENV NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=$NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

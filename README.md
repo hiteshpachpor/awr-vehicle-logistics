@@ -84,6 +84,9 @@ npm run db:seed
 npm run dev
 ```
 
+Set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token
+to enable the operations map.
+
 To truncate all application tables, reset identity sequences, and reload the
 deterministic dataset:
 
@@ -95,6 +98,16 @@ The reset flag is destructive. Drizzle's migration history is intentionally
 preserved so applied migrations are not rerun.
 
 ## API
+
+### Operations lookups
+
+```text
+GET /api/vehicles
+GET /api/drivers
+```
+
+These endpoints provide vehicle and active-driver options with their related
+customer and logistics-vendor details for the operations trip form.
 
 ### Trips
 

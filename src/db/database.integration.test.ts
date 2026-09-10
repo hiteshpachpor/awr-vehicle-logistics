@@ -13,6 +13,7 @@ import {
   trips,
   vehicles,
 } from "./schema";
+import { OperationsRepository } from "@/repositories/operations-repository";
 import { PositionRepository } from "@/repositories/position-repository";
 import { TripRepository } from "@/repositories/trip-repository";
 import {
@@ -149,6 +150,32 @@ describe("database schema", () => {
     expect(duplicate).toEqual({ position: inserted.position, created: false });
     expect(latest.get(seedIds.trip)?.id).toBe(inserted.position.id);
     expect(replay.map(({ id }) => id)).toContain(inserted.position.id);
+  });
+
+  it("lists operational vehicle and driver options with related details", async () => {
+    const operationsRepository = new OperationsRepository(database.db);
+
+    const vehicleOptions = await operationsRepository.listVehicles();
+    const driverOptions = await operationsRepository.listActiveDrivers();
+
+    expect(vehicleOptions).toHaveLength(30);
+    expect(vehicleOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: seedIds.vehicle,
+          customer: expect.objectContaining({ id: seedIds.customer }),
+        }),
+      ]),
+    );
+    expect(driverOptions).toHaveLength(10);
+    expect(driverOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: seedIds.driver,
+          vendor: expect.objectContaining({ id: seedIds.vendor }),
+        }),
+      ]),
+    );
   });
 
   it("delivers position notifications through PostgreSQL", async () => {
