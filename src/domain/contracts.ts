@@ -36,7 +36,14 @@ export const simulationRequestSchema = z.object({
   intervalMs: z.number().int().min(250).max(60_000).default(1_000),
 });
 
+export const resolveGoogleMapsLinkSchema = z.object({
+  url: z.string().trim().min(1).max(4_096),
+});
+
 export type CreateTripInput = z.infer<typeof createTripSchema>;
 export type UpdateTripInput = z.infer<typeof updateTripSchema>;
 export type IngestLocationInput = z.infer<typeof ingestLocationSchema>;
 export type SimulationRequest = z.infer<typeof simulationRequestSchema>;
+export type ResolveGoogleMapsLinkInput = z.infer<
+  typeof resolveGoogleMapsLinkSchema
+>;

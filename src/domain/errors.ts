@@ -29,3 +29,23 @@ export class InvalidStateTransitionError extends ConflictError {
     );
   }
 }
+
+export class InvalidGoogleMapsLinkError extends DomainError {
+  constructor(message = "A valid Google Maps link is required") {
+    super(message, "INVALID_GOOGLE_MAPS_LINK", 400);
+  }
+}
+
+export class GoogleMapsLocationNotFoundError extends DomainError {
+  constructor(
+    message = "The Google Maps link does not contain an extractable place name and coordinates",
+  ) {
+    super(message, "GOOGLE_MAPS_LOCATION_NOT_FOUND", 422);
+  }
+}
+
+export class GoogleMapsResolutionError extends DomainError {
+  constructor(message = "The Google Maps link could not be resolved") {
+    super(message, "GOOGLE_MAPS_RESOLUTION_FAILED", 502);
+  }
+}

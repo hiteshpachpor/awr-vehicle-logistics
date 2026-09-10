@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { WarningCircleIcon } from "@phosphor-icons/react";
+import {
+  CircleNotchIcon,
+  LinkIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +20,7 @@ import type {
   ApiErrorBody,
   CreateTripPayload,
   DriverOption,
+  GoogleMapsLocationResponse,
   TripView,
   VehicleOption,
 } from "@/lib/operations-types";
@@ -281,12 +286,116 @@ function RouteFields({
   lng: string;
   update: (field: keyof FormState, value: string) => void;
 }) {
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const addressField = `${prefix}Address` as keyof FormState;
   const latField = `${prefix}Lat` as keyof FormState;
   const lngField = `${prefix}Lng` as keyof FormState;
+
+  async function importGoogleMapsLocation() {
+    if (!mapsUrl.trim()) {
+      setImportError("Paste a Google Maps link to import this location.");
+      return;
+    }
+
+    setImporting(true);
+    setImportError(null);
+
+    try {
+      const response = await fetch("/api/google-maps/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: mapsUrl.trim() }),
+      });
+      const body = (await response.json()) as
+        | GoogleMapsLocationResponse
+        | ApiErrorBody;
+      if (!response.ok) {
+        throw new Error(
+          getApiErrorMessage(
+            body as ApiErrorBody,
+            "This Google Maps link could not be imported.",
+          ),
+        );
+      }
+
+      const location = (body as GoogleMapsLocationResponse).data;
+      update(addressField, location.name);
+      update(latField, String(location.lat));
+      update(lngField, String(location.lng));
+    } catch (error) {
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "This Google Maps link could not be imported.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <fieldset className="grid gap-4 rounded-xl border border-border p-4">
       <legend className="px-1 text-sm font-semibold">{title}</legend>
+      <Field
+        label="Google Maps link"
+        htmlFor={`${prefix}-maps-url`}
+        helper="Paste a place link to fill the address and coordinates."
+      >
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative">
+            <LinkIcon
+              size={18}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              id={`${prefix}-maps-url`}
+              className={`${inputClass} pl-10`}
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              value={mapsUrl}
+              onChange={(event) => {
+                setMapsUrl(event.target.value);
+                setImportError(null);
+              }}
+              placeholder="https://maps.app.goo.gl/..."
+              disabled={importing}
+              aria-invalid={Boolean(importError)}
+              aria-describedby={
+                importError ? `${prefix}-maps-error` : undefined
+              }
+            />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11"
+            disabled={importing || !mapsUrl.trim()}
+            onClick={importGoogleMapsLocation}
+          >
+            {importing ? (
+              <CircleNotchIcon
+                size={17}
+                aria-hidden="true"
+                className="animate-spin"
+              />
+            ) : null}
+            {importing ? "Importing..." : "Import location"}
+          </Button>
+        </div>
+        {importError ? (
+          <p
+            id={`${prefix}-maps-error`}
+            role="alert"
+            className="text-xs font-medium leading-5 text-destructive"
+          >
+            {importError}
+          </p>
+        ) : null}
+      </Field>
       <Field label="Address" htmlFor={`${prefix}-address`}>
         <input
           id={`${prefix}-address`}

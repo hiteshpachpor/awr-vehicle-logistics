@@ -83,3 +83,13 @@ export type CreateTripPayload = {
   pickup: { address: string; lat: number; lng: number };
   dropoff: { address: string; lat: number; lng: number };
 };
+
+export type GoogleMapsLocation = {
+  name: string;
+  lat: number;
+  lng: number;
+};
+
+export type GoogleMapsLocationResponse = {
+  data: GoogleMapsLocation;
+};
