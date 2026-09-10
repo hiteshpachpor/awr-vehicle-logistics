@@ -37,7 +37,8 @@ export function errorResponse(error: unknown) {
     );
   }
 
-  const databaseError = error as PostgreSqlError;
+  const wrappedError = error as Error & { cause?: PostgreSqlError };
+  const databaseError = wrappedError.cause ?? (error as PostgreSqlError);
   if (databaseError?.code === "23505") {
     if (databaseError.constraint === "trips_vehicle_active_unique") {
       return NextResponse.json(

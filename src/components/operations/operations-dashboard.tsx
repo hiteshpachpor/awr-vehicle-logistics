@@ -2,16 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  CheckCircleIcon,
   ArrowClockwiseIcon,
+  SignOutIcon,
   MapPinIcon,
   PlusIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
+import { useDemoAuth } from "@/components/auth/demo-auth-provider";
 import { Button } from "@/components/ui/button";
+import { useDriverLocation } from "@/hooks/use-driver-location";
 import { useTripEvents } from "@/hooks/use-trip-events";
+import { canAccessTrip, getSessionHome } from "@/lib/demo-auth";
 import type {
   ApiErrorBody,
+  DriverOption,
   Position,
   TripStatus,
   TripView,
@@ -25,10 +32,18 @@ import { TripQueue } from "./trip-queue";
 export function OperationsDashboard({
   initialTripId = null,
   focused = false,
+  vendorId,
+  driverId,
+  createdReference,
 }: {
   initialTripId?: string | null;
   focused?: boolean;
+  vendorId?: string;
+  driverId?: string;
+  createdReference?: string;
 }) {
+  const router = useRouter();
+  const { session, logout } = useDemoAuth();
   const [trips, setTrips] = useState<TripView[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
   const [loading, setLoading] = useState(true);
@@ -36,34 +51,88 @@ export function OperationsDashboard({
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | TripStatus>("all");
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    title: string;
+    description: string;
+  } | null>(
+    createdReference
+      ? {
+          type: "success",
+          title: "Trip created",
+          description: `${createdReference} is ready for driver assignment.`,
+        }
+      : null,
+  );
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [positionLog, setPositionLog] = useState<Position[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(focused);
   const [positionsError, setPositionsError] = useState<string | null>(null);
-  const [runningSimulations, setRunningSimulations] = useState<Set<string>>(
-    new Set(),
-  );
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch("/api/trips", { cache: "no-store" });
+      if (focused && session?.role === "driver") {
+        const driverTripsResponse = await fetch(
+          `/api/trips?driverId=${encodeURIComponent(session.driverId)}`,
+          { cache: "no-store" },
+        );
+        const driverTripsBody = (await driverTripsResponse.json()) as
+          | { data: TripView[] }
+          | ApiErrorBody;
+        if (
+          !driverTripsResponse.ok ||
+          !("data" in driverTripsBody)
+        ) {
+          throw new Error(
+            getApiErrorMessage(driverTripsBody as ApiErrorBody),
+          );
+        }
+        const activeTrip = driverTripsBody.data.find(
+          (trip) => trip.trip.status === "in_transit",
+        );
+        if (activeTrip && activeTrip.trip.id !== initialTripId) {
+          router.replace(`/trips/${activeTrip.trip.id}`);
+          return;
+        }
+      }
+      const params = new URLSearchParams();
+      if (vendorId) params.set("vendorId", vendorId);
+      if (driverId) params.set("driverId", driverId);
+      const endpoint = focused && initialTripId
+        ? `/api/trips/${initialTripId}`
+        : `/api/trips${params.size ? `?${params}` : ""}`;
+      const response = await fetch(endpoint, { cache: "no-store" });
       const body = (await response.json()) as
+        | TripView
         | { data: TripView[] }
         | ApiErrorBody;
-      if (!response.ok || !("data" in body)) {
+      if (!response.ok) {
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
-      setTrips(body.data);
+      const loadedTrips =
+        "data" in body ? body.data : [body as TripView];
+      if (
+        focused &&
+        session &&
+        loadedTrips[0] &&
+        !canAccessTrip(session, loadedTrips[0])
+      ) {
+        router.replace(getSessionHome(session));
+        return;
+      }
+      setTrips(loadedTrips);
       setSelectedId((current) => {
-        if (current && body.data.some((trip) => trip.trip.id === current)) {
+        if (current && loadedTrips.some((trip) => trip.trip.id === current)) {
           return current;
         }
         if (
           initialTripId &&
-          body.data.some((trip) => trip.trip.id === initialTripId)
+          loadedTrips.some((trip) => trip.trip.id === initialTripId)
         ) {
           return initialTripId;
         }
@@ -79,7 +148,7 @@ export function OperationsDashboard({
     } finally {
       setLoading(false);
     }
-  }, [initialTripId]);
+  }, [driverId, focused, initialTripId, router, session, vendorId]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
@@ -89,9 +158,59 @@ export function OperationsDashboard({
   }, [loadTrips]);
 
   useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+      if (createdReference) router.replace("/ops/trips");
+    }, 12_000);
+    return () => window.clearTimeout(timer);
+  }, [createdReference, notice, router]);
+
+  useEffect(() => {
+    if (focused || session?.role !== "driver" || loading) return;
+    const activeTrip = trips.find(
+      (trip) => trip.trip.status === "in_transit",
+    );
+    if (activeTrip) router.replace(`/trips/${activeTrip.trip.id}`);
+  }, [focused, loading, router, session?.role, trips]);
+
+  useEffect(() => {
+    if (
+      focused ||
+      !session ||
+      session.role === "driver" ||
+      drivers.length
+    ) {
+      return;
+    }
+    const query =
+      session.role === "controller"
+        ? `?vendorId=${encodeURIComponent(session.vendorId)}`
+        : "";
+    void fetch(`/api/drivers${query}`, { cache: "no-store" })
+      .then(async (response) => {
+        const body = (await response.json()) as
+          | { data: DriverOption[] }
+          | ApiErrorBody;
+        if (!response.ok || !("data" in body)) {
+          throw new Error(getApiErrorMessage(body as ApiErrorBody));
+        }
+        setDrivers(body.data);
+      })
+      .catch((reason: unknown) => {
+        setNotice({
+          type: "error",
+          title: "Drivers could not be loaded",
+          description:
+            reason instanceof Error ? reason.message : "Try refreshing.",
+        });
+      });
+  }, [drivers.length, focused, session]);
+
+  useEffect(() => {
     if (!focused || !selectedId) return;
 
-    const controller = new AbortController();
+    let active = true;
     const loadingTimer = window.setTimeout(() => {
       setPositionsLoading(true);
       setPositionsError(null);
@@ -101,7 +220,6 @@ export function OperationsDashboard({
       try {
         const response = await fetch(`/api/trips/${selectedId}/positions`, {
           cache: "no-store",
-          signal: controller.signal,
         });
         const body = (await response.json()) as
           | { data: Position[] }
@@ -110,20 +228,22 @@ export function OperationsDashboard({
           throw new Error(getApiErrorMessage(body as ApiErrorBody));
         }
         setPositionLog((current) =>
-          mergePositions(
-            body.data,
-            current.filter((position) => position.tripId === selectedId),
-          ),
+          active
+            ? mergePositions(
+                body.data,
+                current.filter((position) => position.tripId === selectedId),
+              )
+            : current,
         );
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (!active) return;
         setPositionsError(
           error instanceof Error
             ? error.message
             : "Location pings could not be loaded.",
         );
       } finally {
-        if (!controller.signal.aborted) {
+        if (active) {
           setPositionsLoading(false);
         }
       }
@@ -131,13 +251,17 @@ export function OperationsDashboard({
 
     void loadPositions();
     return () => {
+      active = false;
       window.clearTimeout(loadingTimer);
-      controller.abort();
     };
   }, [focused, selectedId]);
 
   const selectedTrip =
     trips.find((trip) => trip.trip.id === selectedId) ?? null;
+  const driverLocation = useDriverLocation(
+    selectedTrip,
+    focused && session?.role === "driver",
+  );
 
   const handlePosition = useCallback((position: Position) => {
     setTrips((current) =>
@@ -190,13 +314,6 @@ export function OperationsDashboard({
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
       replaceTrip(body as TripView);
-      if (status === "completed" || status === "cancelled") {
-        setRunningSimulations((current) => {
-          const next = new Set(current);
-          next.delete(selectedId);
-          return next;
-        });
-      }
     } catch (error) {
       setMutationError(
         error instanceof Error
@@ -208,71 +325,33 @@ export function OperationsDashboard({
     }
   }
 
-  async function startSimulation(intervalMs: number) {
-    if (!selectedId) return;
-    setMutating(true);
-    setMutationError(null);
+  async function assignDriver(tripId: string, driverId: string) {
+    setAssigningTripId(tripId);
     try {
-      const response = await fetch(`/api/trips/${selectedId}/simulation`, {
-        method: "POST",
+      const response = await fetch(`/api/trips/${tripId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intervalMs }),
+        body: JSON.stringify({ driverId }),
       });
-      const body = (await response.json()) as ApiErrorBody;
+      const body = (await response.json()) as TripView | ApiErrorBody;
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(body));
+        throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
-      setRunningSimulations((current) => new Set(current).add(selectedId));
-      const tripResponse = await fetch(`/api/trips/${selectedId}`, {
-        cache: "no-store",
+      replaceTrip(body as TripView);
+      setNotice({
+        type: "success",
+        title: "Driver assigned",
+        description: `${(body as TripView).driver?.name} will handle ${(body as TripView).trip.referenceNumber}.`,
       });
-      if (tripResponse.ok) {
-        replaceTrip((await tripResponse.json()) as TripView);
-      }
     } catch (error) {
-      setMutationError(
-        error instanceof Error
-          ? error.message
-          : "The simulation could not be started.",
-      );
-    } finally {
-      setMutating(false);
-    }
-  }
-
-  async function stopSimulation() {
-    if (!selectedId) return;
-    setMutating(true);
-    setMutationError(null);
-    try {
-      const response = await fetch(`/api/trips/${selectedId}/simulation`, {
-        method: "DELETE",
+      setNotice({
+        type: "error",
+        title: "Driver could not be assigned",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
       });
-      if (!response.ok && response.status !== 404) {
-        const body = (await response.json()) as ApiErrorBody;
-        throw new Error(getApiErrorMessage(body));
-      }
-      setRunningSimulations((current) => {
-        const next = new Set(current);
-        next.delete(selectedId);
-        return next;
-      });
-      if (response.status === 404) {
-        const tripResponse = await fetch(`/api/trips/${selectedId}`, {
-          cache: "no-store",
-        });
-        if (tripResponse.ok) {
-          replaceTrip((await tripResponse.json()) as TripView);
-        }
-      }
-    } catch (error) {
-      setMutationError(
-        error instanceof Error
-          ? error.message
-          : "The simulation could not be stopped.",
-      );
     } finally {
-      setMutating(false);
+      setAssigningTripId(null);
     }
   }
 
@@ -299,12 +378,24 @@ export function OperationsDashboard({
       ),
     [filter, query, trips],
   );
+  const homeHref = session ? getSessionHome(session) : "/";
+  const workspaceTitle =
+    session?.role === "operations"
+      ? "Operations Control"
+      : session?.role === "controller"
+        ? session.vendorName
+        : (session?.driverName ?? "Driver trips");
+  const homeLinkHref =
+    session?.role === "driver" &&
+    selectedTrip?.trip.status === "in_transit"
+      ? `/trips/${selectedTrip.trip.id}`
+      : homeHref;
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-background lg:h-[100dvh] lg:overflow-hidden">
       <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border bg-surface px-4 sm:px-5">
         <Link
-          href="/"
+          href={homeLinkHref}
           aria-label="Go to trips index"
           className="flex min-w-0 items-center gap-3 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
@@ -313,7 +404,7 @@ export function OperationsDashboard({
           </span>
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">
-              Operations Control
+              {workspaceTitle}
             </h1>
             {lastRefresh ? (
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -341,12 +432,25 @@ export function OperationsDashboard({
               className={loading ? "animate-spin" : ""}
             />
           </Button>
-          <Button asChild>
-            <Link href="/ops/trips/new">
-              <PlusIcon size={17} weight="bold" />
-              <span className="hidden sm:inline">New trip</span>
-              <span className="sm:hidden">New</span>
-            </Link>
+          {session?.role === "operations" ? (
+            <Button asChild>
+              <Link href="/ops/trips/new">
+                <PlusIcon size={17} weight="bold" />
+                <span className="hidden sm:inline">New trip</span>
+                <span className="sm:hidden">New</span>
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Sign out"
+            onClick={() => {
+              logout();
+              router.replace("/");
+            }}
+          >
+            <SignOutIcon size={18} />
           </Button>
         </div>
       </header>
@@ -404,14 +508,11 @@ export function OperationsDashboard({
               streamStatus={streamStatus}
               mutating={mutating}
               mutationError={mutationError}
-              simulationRunning={
-                selectedId ? runningSimulations.has(selectedId) : false
-              }
+              role={session?.role ?? "operations"}
+              homeHref={homeHref}
+              locationStatus={driverLocation.status}
+              locationError={driverLocation.error}
               onTransition={(status) => void transitionTrip(status)}
-              onStartSimulation={(intervalMs) =>
-                void startSimulation(intervalMs)
-              }
-              onStopSimulation={() => void stopSimulation()}
               focused
             />
           </div>
@@ -425,10 +526,49 @@ export function OperationsDashboard({
               onFilterChange={setFilter}
               counts={counts}
               loading={loading}
+              drivers={
+                session?.role === "operations" ||
+                session?.role === "controller"
+                  ? drivers
+                  : undefined
+              }
+              assigningTripId={assigningTripId}
+              onAssignDriver={
+                session?.role === "operations" ||
+                session?.role === "controller"
+                  ? (tripId, selectedDriverId) =>
+                      void assignDriver(tripId, selectedDriverId)
+                  : undefined
+              }
             />
           </div>
         )
       )}
+      {notice ? (
+        <div
+          role={notice.type === "error" ? "alert" : "status"}
+          className="fixed right-4 top-4 z-50 flex w-[min(360px,calc(100vw-2rem))] items-start gap-3 rounded-xl border border-border bg-surface p-4 shadow-[0_18px_50px_rgb(20_22_26/22%)]"
+        >
+          {notice.type === "success" ? (
+            <CheckCircleIcon
+              size={20}
+              weight="fill"
+              className="mt-0.5 shrink-0 text-primary"
+            />
+          ) : (
+            <WarningCircleIcon
+              size={20}
+              className="mt-0.5 shrink-0 text-destructive"
+            />
+          )}
+          <div>
+            <p className="text-sm font-semibold">{notice.title}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {notice.description}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

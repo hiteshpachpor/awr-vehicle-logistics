@@ -81,11 +81,19 @@ describe("operations HTTP handlers", () => {
       },
     ]);
 
-    const response = await listDriversHandler(app);
+    const response = await listDriversHandler(
+      new NextRequest(
+        "http://localhost/api/drivers?vendorId=00000000-0000-4000-8000-000000000001",
+      ),
+      app,
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       data: [{ name: "Bilal Rahman" }],
     });
+    expect(app.operationsService.listDrivers).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000001",
+    );
   });
 });

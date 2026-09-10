@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   CaretRightIcon,
@@ -7,12 +8,18 @@ import {
   MapPinIcon,
   TruckIcon,
 } from "@phosphor-icons/react";
-import type { TripStatus, TripView } from "@/lib/operations-types";
+import { Button } from "@/components/ui/button";
+import type {
+  DriverOption,
+  TripStatus,
+  TripView,
+} from "@/lib/operations-types";
 import {
   formatRelativeTime,
   tripStatusLabels,
 } from "@/lib/operations-ui";
 import { cn } from "@/lib/utils";
+import { SearchSelect } from "./search-select";
 
 const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -30,6 +37,9 @@ export function TripQueue({
   onFilterChange,
   counts,
   loading,
+  drivers,
+  assigningTripId,
+  onAssignDriver,
 }: {
   trips: TripView[];
   query: string;
@@ -38,6 +48,9 @@ export function TripQueue({
   onFilterChange: (filter: "all" | TripStatus) => void;
   counts: Record<"all" | TripStatus, number>;
   loading: boolean;
+  drivers?: DriverOption[];
+  assigningTripId?: string | null;
+  onAssignDriver?: (tripId: string, driverId: string) => void;
 }) {
   return (
     <section className="w-full max-w-6xl self-start">
@@ -139,6 +152,14 @@ export function TripQueue({
                     />
                   </span>
                 </Link>
+                {onAssignDriver && trip.trip.status === "created" ? (
+                  <DriverAssignment
+                    trip={trip}
+                    drivers={drivers ?? []}
+                    assigning={assigningTripId === trip.trip.id}
+                    onAssign={onAssignDriver}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -159,6 +180,60 @@ export function TripQueue({
         </div>
       </div>
     </section>
+  );
+}
+
+function DriverAssignment({
+  trip,
+  drivers,
+  assigning,
+  onAssign,
+}: {
+  trip: TripView;
+  drivers: DriverOption[];
+  assigning: boolean;
+  onAssign: (tripId: string, driverId: string) => void;
+}) {
+  const [driverId, setDriverId] = useState(trip.driver?.id ?? "");
+  const vendorDrivers = drivers.filter(
+    (driver) => driver.vendor.id === trip.vendor.id,
+  );
+
+  return (
+    <div className="mx-3 mb-3 grid gap-2 rounded-[10px] bg-muted/55 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+      <div className="grid gap-1.5">
+        <span className="text-xs font-semibold text-muted-foreground">
+          Driver assignment · {trip.vendor.name}
+        </span>
+        <SearchSelect
+          value={driverId}
+          onValueChange={setDriverId}
+          options={vendorDrivers.map((driver) => ({
+            value: driver.id,
+            label: driver.name,
+            description: driver.externalReference ?? undefined,
+            searchText: driver.phone ?? "",
+          }))}
+          placeholder={
+            vendorDrivers.length ? "Choose driver" : "No active drivers"
+          }
+          searchPlaceholder="Search drivers"
+          disabled={assigning || !vendorDrivers.length}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={!driverId || assigning || driverId === trip.driver?.id}
+        onClick={() => onAssign(trip.trip.id, driverId)}
+      >
+        {assigning
+          ? "Assigning…"
+          : trip.driver
+            ? "Update driver"
+            : "Assign driver"}
+      </Button>
+    </div>
   );
 }
 

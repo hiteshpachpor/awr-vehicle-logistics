@@ -7,6 +7,10 @@ const vehicleQuerySchema = z.object({
   customerId: z.uuid().optional(),
 });
 
+const driverQuerySchema = z.object({
+  vendorId: z.uuid().optional(),
+});
+
 export async function listCustomersHandler(container: AppContainer) {
   try {
     const customers = await container.operationsService.listCustomers();
@@ -43,9 +47,17 @@ export async function listVendorsHandler(container: AppContainer) {
   }
 }
 
-export async function listDriversHandler(container: AppContainer) {
+export async function listDriversHandler(
+  request: NextRequest,
+  container: AppContainer,
+) {
   try {
-    const drivers = await container.operationsService.listDrivers();
+    const query = driverQuerySchema.parse({
+      vendorId: request.nextUrl.searchParams.get("vendorId") ?? undefined,
+    });
+    const drivers = await container.operationsService.listDrivers(
+      query.vendorId,
+    );
     return NextResponse.json({ data: drivers });
   } catch (error) {
     return errorResponse(error);

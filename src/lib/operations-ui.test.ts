@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   availableTripActions,
+  availableTripActionsForRole,
   getApiErrorMessage,
   matchesTrip,
 } from "./operations-ui";
@@ -30,6 +31,18 @@ describe("operations UI helpers", () => {
       "cancel",
     ]);
     expect(availableTripActions("completed")).toEqual([]);
+    expect(
+      availableTripActionsForRole("created", "operations", false),
+    ).toEqual(["cancel"]);
+    expect(
+      availableTripActionsForRole("created", "controller", true),
+    ).toEqual([]);
+    expect(
+      availableTripActionsForRole("created", "driver", true),
+    ).toEqual(["start"]);
+    expect(
+      availableTripActionsForRole("in_transit", "driver", true),
+    ).toEqual(["complete"]);
   });
 
   it("searches operational trip fields", () => {

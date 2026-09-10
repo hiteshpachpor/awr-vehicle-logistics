@@ -67,6 +67,7 @@ export function CreateTripForm() {
 
   const update = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+    setSubmitError(null);
   };
 
   useEffect(() => {
@@ -116,6 +117,7 @@ export function CreateTripForm() {
 
   async function selectCustomer(customerId: string) {
     selectedCustomerRef.current = customerId;
+    setSubmitError(null);
     setForm((current) => ({
       ...current,
       customerId,
@@ -192,7 +194,9 @@ export function CreateTripForm() {
       if (!response.ok) {
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
-      router.push(`/trips/${(body as TripView).trip.id}`);
+      router.push(
+        `/ops/trips?created=${encodeURIComponent((body as TripView).trip.referenceNumber)}`,
+      );
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "The trip could not be created.",

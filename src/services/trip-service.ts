@@ -8,6 +8,7 @@ import {
 import type { TripStatus } from "@/db/schema";
 import {
   TripRepository,
+  type TripFilters,
   type TripDetails,
 } from "@/repositories/trip-repository";
 import { PositionRepository } from "@/repositories/position-repository";
@@ -68,8 +69,8 @@ export class TripService {
     return { ...trip, latestPosition: positions.get(id) ?? null };
   }
 
-  async list(status?: TripStatus): Promise<TripView[]> {
-    const trips = await this.trips.list(status);
+  async list(filters: TripFilters = {}): Promise<TripView[]> {
+    const trips = await this.trips.list(filters);
     const positions = await this.positions.latestForTrips(
       trips.map(({ trip }) => trip.id),
     );
@@ -78,6 +79,42 @@ export class TripService {
       ...trip,
       latestPosition: positions.get(trip.trip.id) ?? null,
     }));
+  }
+
+  async assignDriver(id: string, driverId: string): Promise<TripView> {
+    const existing = await this.trips.findById(id);
+    if (!existing) {
+      throw new NotFoundError("Trip");
+    }
+    if (existing.trip.status !== "created") {
+      throw new ConflictError(
+        "Drivers can only be assigned before a trip starts",
+        "TRIP_ALREADY_STARTED",
+      );
+    }
+    const driver = await this.trips.findAssignableDriver(
+      driverId,
+      existing.trip.vendorId,
+    );
+    if (!driver) {
+      throw new ConflictError(
+        "Choose an active driver from the trip's logistics vendor",
+        "DRIVER_NOT_AVAILABLE",
+      );
+    }
+    const updated = await this.trips.updateDriver(
+      id,
+      existing.trip.version,
+      driverId,
+      this.now(),
+    );
+    if (!updated) {
+      throw new ConflictError(
+        "Trip was modified by another request",
+        "CONCURRENT_MODIFICATION",
+      );
+    }
+    return this.get(id);
   }
 
   async transition(id: string, status: TripStatus): Promise<TripView> {

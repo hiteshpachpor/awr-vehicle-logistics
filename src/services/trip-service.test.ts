@@ -84,6 +84,51 @@ describe("TripService", () => {
     });
   });
 
+  it("assigns an active driver from the trip vendor", async () => {
+    const before = tripDetails("created");
+    before.trip.driverId = null;
+    before.driver = null;
+    const after = tripDetails("created");
+    const repository = {
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(after),
+      findAssignableDriver: vi.fn().mockResolvedValue({ id: after.driver!.id }),
+      updateDriver: vi.fn().mockResolvedValue(after.trip),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn().mockResolvedValue(new Map()),
+    } as unknown as PositionRepository;
+    const service = new TripService(repository, positions);
+
+    const result = await service.assignDriver(before.trip.id, after.driver!.id);
+
+    expect(repository.findAssignableDriver).toHaveBeenCalledWith(
+      after.driver!.id,
+      before.trip.vendorId,
+    );
+    expect(result.driver?.id).toBe(after.driver!.id);
+  });
+
+  it("rejects a driver outside the trip vendor", async () => {
+    const trip = tripDetails("created");
+    const repository = {
+      findById: vi.fn().mockResolvedValue(trip),
+      findAssignableDriver: vi.fn().mockResolvedValue(null),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn(),
+    } as unknown as PositionRepository;
+    const service = new TripService(repository, positions);
+
+    await expect(
+      service.assignDriver(trip.trip.id, "another-driver"),
+    ).rejects.toMatchObject({
+      code: "DRIVER_NOT_AVAILABLE",
+    });
+  });
+
   it("updates a valid transition using optimistic concurrency", async () => {
     const before = tripDetails("created");
     const after = tripDetails("in_transit");

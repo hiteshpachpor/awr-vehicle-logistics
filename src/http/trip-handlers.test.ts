@@ -21,6 +21,7 @@ function container(overrides: Partial<AppContainer> = {}) {
       list: vi.fn(),
       get: vi.fn(),
       transition: vi.fn(),
+      assignDriver: vi.fn(),
     },
     positionRepository: { listRecent: vi.fn() },
     locationService: { ingest: vi.fn() },
@@ -55,9 +56,11 @@ describe("trip HTTP handlers", () => {
   it("returns a specific conflict when a vehicle has an active trip", async () => {
     const app = container();
     vi.mocked(app.tripService.create).mockRejectedValue(
-      Object.assign(new Error("duplicate key"), {
-        code: "23505",
-        constraint: "trips_vehicle_active_unique",
+      Object.assign(new Error("failed query"), {
+        cause: Object.assign(new Error("duplicate key"), {
+          code: "23505",
+          constraint: "trips_vehicle_active_unique",
+        }),
       }),
     );
     const request = new Request("http://localhost/api/trips", {
@@ -127,13 +130,39 @@ describe("trip HTTP handlers", () => {
     const app = container();
     vi.mocked(app.tripService.list).mockResolvedValue([]);
     const request = new NextRequest(
-      "http://localhost/api/trips?status=in_transit",
+      "http://localhost/api/trips?status=in_transit&vendorId=00000000-0000-4000-8000-000000000002&driverId=00000000-0000-4000-8000-000000000003",
     );
 
     const response = await listTripsHandler(request, app);
 
     expect(response.status).toBe(200);
-    expect(app.tripService.list).toHaveBeenCalledWith("in_transit");
+    expect(app.tripService.list).toHaveBeenCalledWith({
+      status: "in_transit",
+      vendorId: "00000000-0000-4000-8000-000000000002",
+      driverId: "00000000-0000-4000-8000-000000000003",
+    });
+  });
+
+  it("assigns a driver through the trip update endpoint", async () => {
+    const app = container();
+    vi.mocked(app.tripService.assignDriver).mockResolvedValue({
+      trip: { id: tripId },
+      driver: { id: "00000000-0000-4000-8000-000000000002" },
+    } as never);
+    const request = new Request(`http://localhost/api/trips/${tripId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        driverId: "00000000-0000-4000-8000-000000000002",
+      }),
+    });
+
+    const response = await updateTripHandler(tripId, request, app);
+
+    expect(response.status).toBe(200);
+    expect(app.tripService.assignDriver).toHaveBeenCalledWith(
+      tripId,
+      "00000000-0000-4000-8000-000000000002",
+    );
   });
 
   it("lists recent positions for an existing trip", async () => {

@@ -36,8 +36,10 @@ export async function listTripsHandler(
   try {
     const query = listTripsQuerySchema.parse({
       status: request.nextUrl.searchParams.get("status") ?? undefined,
+      vendorId: request.nextUrl.searchParams.get("vendorId") ?? undefined,
+      driverId: request.nextUrl.searchParams.get("driverId") ?? undefined,
     });
-    const trips = await container.tripService.list(query.status);
+    const trips = await container.tripService.list(query);
     return NextResponse.json({ data: trips });
   } catch (error) {
     return errorResponse(error);
@@ -75,7 +77,10 @@ export async function updateTripHandler(
   try {
     const tripId = idSchema.parse(id);
     const input = updateTripSchema.parse(await request.json());
-    const trip = await container.tripService.transition(tripId, input.status);
+    const trip =
+      "status" in input
+        ? await container.tripService.transition(tripId, input.status)
+        : await container.tripService.assignDriver(tripId, input.driverId);
     return NextResponse.json(trip);
   } catch (error) {
     return errorResponse(error);

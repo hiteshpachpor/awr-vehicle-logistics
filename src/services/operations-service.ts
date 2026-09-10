@@ -15,7 +15,7 @@ export class OperationsService {
     return this.operations.listActiveVendors();
   }
 
-  listDrivers() {
-    return this.operations.listActiveDrivers();
+  listDrivers(vendorId?: string) {
+    return this.operations.listActiveDrivers(vendorId);
   }
 }

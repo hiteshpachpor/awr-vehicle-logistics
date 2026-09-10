@@ -231,7 +231,7 @@ describe("database schema", () => {
     const tripRepository = new TripRepository(database.db);
     const positionRepository = new PositionRepository(database.db);
     const details = await tripRepository.findById(seedIds.trip);
-    const listed = await tripRepository.list("created");
+    const listed = await tripRepository.list({ status: "created" });
 
     expect(details).toMatchObject({
       trip: { id: seedIds.trip },

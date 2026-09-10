@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import {
   customers,
@@ -86,8 +86,8 @@ export class OperationsRepository {
       .orderBy(asc(logisticsVendors.name));
   }
 
-  listActiveDrivers(): Promise<OperationsDriver[]> {
-    return this.db
+  listActiveDrivers(vendorId?: string): Promise<OperationsDriver[]> {
+    const query = this.db
       .select({
         id: drivers.id,
         name: drivers.name,
@@ -103,7 +103,14 @@ export class OperationsRepository {
         logisticsVendors,
         eq(drivers.vendorId, logisticsVendors.id),
       )
-      .where(eq(drivers.active, true))
+      .$dynamic();
+
+    return query
+      .where(
+        vendorId
+          ? and(eq(drivers.active, true), eq(drivers.vendorId, vendorId))
+          : eq(drivers.active, true),
+      )
       .orderBy(asc(drivers.name));
   }
 }

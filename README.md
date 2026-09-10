@@ -97,6 +97,20 @@ npm run db:seed -- --reset-db
 The reset flag is destructive. Drizzle's migration history is intentionally
 preserved so applied migrations are not rerun.
 
+## Demo workspaces
+
+Open `/` and sign in with the password `password`.
+
+- AWR Operations uses `/ops/trips` and can create trips, assign drivers, and
+  cancel ready trips.
+- A vendor Controller uses `/vendor/:vendorId/trips` and can assign that
+  vendor's drivers.
+- A Driver uses `/vendor/:vendorId/driver/:driverId/trips`, can start and end
+  assigned trips, and shares browser geolocation while a trip is in transit.
+
+The demo session is stored in the browser. APIs remain unauthenticated by
+design.
+
 ## API
 
 ### Operations lookups
@@ -118,6 +132,8 @@ vendor assigns a driver separately.
 POST  /api/trips
 GET   /api/trips
 GET   /api/trips?status=in_transit
+GET   /api/trips?vendorId=:id
+GET   /api/trips?driverId=:id
 GET   /api/trips/:id
 PATCH /api/trips/:id
 ```
@@ -145,6 +161,12 @@ Start or complete a trip:
 
 ```json
 { "status": "in_transit" }
+```
+
+Assign a driver before the trip starts:
+
+```json
+{ "driverId": "00000000-0000-4000-8000-000000000004" }
 ```
 
 Allowed transitions are `created → in_transit → completed`; created and

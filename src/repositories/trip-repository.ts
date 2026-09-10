@@ -12,6 +12,12 @@ import {
 
 export type NewTrip = typeof trips.$inferInsert;
 
+export type TripFilters = {
+  status?: TripStatus;
+  vendorId?: string;
+  driverId?: string;
+};
+
 export type TripDetails = {
   trip: Trip;
   vehicle: {
@@ -88,7 +94,12 @@ export class TripRepository {
     return result ?? null;
   }
 
-  async list(status?: TripStatus): Promise<TripDetails[]> {
+  async list(filters: TripFilters = {}): Promise<TripDetails[]> {
+    const conditions = [
+      filters.status ? eq(trips.status, filters.status) : undefined,
+      filters.vendorId ? eq(trips.vendorId, filters.vendorId) : undefined,
+      filters.driverId ? eq(trips.driverId, filters.driverId) : undefined,
+    ].filter((condition) => condition !== undefined);
     const query = this.db
       .select(detailSelection)
       .from(trips)
@@ -102,8 +113,47 @@ export class TripRepository {
       .$dynamic();
 
     return query
-      .where(status ? eq(trips.status, status) : undefined)
+      .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(trips.updatedAt));
+  }
+
+  async findAssignableDriver(id: string, vendorId: string) {
+    const [driver] = await this.db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(
+        and(
+          eq(drivers.id, id),
+          eq(drivers.vendorId, vendorId),
+          eq(drivers.active, true),
+        ),
+      )
+      .limit(1);
+    return driver ?? null;
+  }
+
+  async updateDriver(
+    id: string,
+    currentVersion: number,
+    driverId: string,
+    now: Date,
+  ): Promise<Trip | null> {
+    const [updated] = await this.db
+      .update(trips)
+      .set({
+        driverId,
+        version: currentVersion + 1,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(trips.id, id),
+          eq(trips.version, currentVersion),
+          eq(trips.status, "created"),
+        ),
+      )
+      .returning();
+    return updated ?? null;
   }
 
   async updateStatus(

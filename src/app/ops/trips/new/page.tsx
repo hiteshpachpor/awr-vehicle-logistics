@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr";
+import { RouteGuard } from "@/components/auth/route-guard";
 import { CreateTripForm } from "@/components/operations/create-trip-dialog";
 
 export const metadata = {
@@ -8,11 +9,12 @@ export const metadata = {
 
 export default function NewTripPage() {
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <RouteGuard role="operations">
+      <main className="min-h-[100dvh] bg-background">
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex min-h-16 max-w-5xl items-center px-4 sm:px-6">
           <Link
-            href="/"
+            href="/ops/trips"
             className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeftIcon size={16} />
@@ -35,6 +37,7 @@ export default function NewTripPage() {
           <CreateTripForm />
         </section>
       </div>
-    </main>
+      </main>
+    </RouteGuard>
   );
 }

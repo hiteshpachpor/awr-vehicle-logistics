@@ -1,5 +1,5 @@
-import { OperationsDashboard } from "@/components/operations/operations-dashboard";
+import { LoginScreen } from "@/components/auth/login-screen";
 
 export default function Home() {
-  return <OperationsDashboard />;
+  return <LoginScreen />;
 }

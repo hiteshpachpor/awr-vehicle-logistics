@@ -16,9 +16,10 @@ export const createTripSchema = z.object({
   scheduledAt: z.iso.datetime({ offset: true }).optional(),
 });
 
-export const updateTripSchema = z.object({
-  status: z.enum(tripStatuses),
-});
+export const updateTripSchema = z.union([
+  z.object({ status: z.enum(tripStatuses) }),
+  z.object({ driverId: z.uuid() }),
+]);
 
 export const ingestLocationSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -30,6 +31,8 @@ export const ingestLocationSchema = z.object({
 
 export const listTripsQuerySchema = z.object({
   status: z.enum(tripStatuses).optional(),
+  vendorId: z.uuid().optional(),
+  driverId: z.uuid().optional(),
 });
 
 export const simulationRequestSchema = z.object({

@@ -8,6 +8,7 @@ export const tripStatusLabels: Record<TripStatus, string> = {
 };
 
 export type TripAction = "start" | "complete" | "cancel";
+export type WorkspaceRole = "operations" | "controller" | "driver";
 
 export function availableTripActions(
   status: TripStatus,
@@ -19,6 +20,19 @@ export function availableTripActions(
     return ["complete", "cancel"] as const;
   }
   return [] as const;
+}
+
+export function availableTripActionsForRole(
+  status: TripStatus,
+  role: WorkspaceRole,
+  hasDriver: boolean,
+) {
+  return availableTripActions(status).filter((action) => {
+    if (role === "driver") {
+      return action !== "cancel" && (action !== "start" || hasDriver);
+    }
+    return role === "operations" && action === "cancel";
+  });
 }
 
 export function matchesTrip(trip: TripView, query: string) {

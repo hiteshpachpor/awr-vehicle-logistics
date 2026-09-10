@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -11,7 +10,6 @@ import {
   CheckCircleIcon,
   MapPinIcon,
   PlayIcon,
-  StopIcon,
   UserIcon,
   WarningCircleIcon,
   XCircleIcon,
@@ -28,10 +26,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import type { DriverLocationStatus } from "@/hooks/use-driver-location";
 import type { StreamStatus } from "@/hooks/use-trip-events";
 import type { TripStatus, TripView } from "@/lib/operations-types";
 import {
-  availableTripActions,
+  availableTripActionsForRole,
   formatDateTime,
   formatRelativeTime,
 } from "@/lib/operations-ui";
@@ -50,26 +49,29 @@ export function TripInspector({
   streamStatus,
   mutating,
   mutationError,
-  simulationRunning,
+  role,
+  homeHref,
+  locationStatus,
+  locationError,
   onTransition,
-  onStartSimulation,
-  onStopSimulation,
   focused,
 }: {
   trip: TripView | null;
   streamStatus: StreamStatus;
   mutating: boolean;
   mutationError: string | null;
-  simulationRunning: boolean;
+  role: "operations" | "controller" | "driver";
+  homeHref: string;
+  locationStatus: DriverLocationStatus;
+  locationError: string | null;
   onTransition: (status: TripStatus) => void;
-  onStartSimulation: (intervalMs: number) => void;
-  onStopSimulation: () => void;
   focused?: boolean;
 }) {
-  const [intervalMs, setIntervalMs] = useState("1000");
   const actions = trip
-    ? availableTripActions(trip.trip.status).filter(
-        (action) => action !== "start" || Boolean(trip.driver),
+    ? availableTripActionsForRole(
+        trip.trip.status,
+        role,
+        Boolean(trip.driver),
       )
     : [];
 
@@ -87,15 +89,13 @@ export function TripInspector({
     );
   }
 
-  const hasSimulationAction =
-    trip.trip.status === "created" || trip.trip.status === "in_transit";
-
   return (
     <aside className="min-h-0 overflow-y-auto bg-surface lg:col-start-1 lg:row-start-1 lg:border-r lg:border-border">
       <div className="border-b border-border p-5">
-        {focused ? (
+        {focused &&
+        !(role === "driver" && trip.trip.status === "in_transit") ? (
           <Link
-            href="/"
+            href={homeHref}
             className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeftIcon size={14} />
@@ -216,7 +216,31 @@ export function TripInspector({
           )}
         </DetailGroup>
 
-        {actions.length || hasSimulationAction ? (
+        {role === "driver" && trip.trip.status === "in_transit" ? (
+          <DetailGroup title="Location sharing">
+            <div
+              className={
+                locationError
+                  ? "rounded-[10px] bg-destructive/8 p-3 text-sm text-destructive"
+                  : "rounded-[10px] bg-primary/8 p-3 text-sm text-foreground"
+              }
+            >
+              <p className="font-semibold">
+                {locationStatus === "sharing"
+                  ? "Sharing live location"
+                  : locationStatus === "requesting"
+                    ? "Requesting location access"
+                    : "Location sharing needs attention"}
+              </p>
+              <p className="mt-1 text-xs leading-5">
+                {locationError ??
+                  "Keep this page open while the trip is in progress."}
+              </p>
+            </div>
+          </DetailGroup>
+        ) : null}
+
+        {actions.length ? (
           <DetailGroup title="Trip controls">
             <div className="grid grid-cols-2 gap-2">
               {actions.includes("start") ? (
@@ -234,7 +258,7 @@ export function TripInspector({
                   onClick={() => onTransition("completed")}
                 >
                   <CheckCircleIcon weight="bold" />
-                  Complete
+                  End trip
                 </Button>
               ) : null}
               {actions.includes("cancel") ? (
@@ -265,55 +289,6 @@ export function TripInspector({
                 </AlertDialog>
               ) : null}
             </div>
-
-            {hasSimulationAction ? (
-              <div className="mt-3 rounded-[10px] border border-border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">Demo simulation</p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Send sample positions through the live tracking pipeline.
-                    </p>
-                  </div>
-                  {simulationRunning ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={mutating}
-                      onClick={onStopSimulation}
-                    >
-                      <StopIcon weight="fill" />
-                      Stop
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={mutating}
-                      onClick={() => onStartSimulation(Number(intervalMs))}
-                    >
-                      <PlayIcon weight="fill" />
-                      Simulate
-                    </Button>
-                  )}
-                </div>
-                {!simulationRunning ? (
-                  <label className="mt-3 grid gap-1.5 text-xs font-semibold">
-                    Update interval
-                    <select
-                      value={intervalMs}
-                      onChange={(event) => setIntervalMs(event.target.value)}
-                      className="h-9 rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
-                    >
-                      <option value="500">Every 0.5 seconds</option>
-                      <option value="1000">Every second</option>
-                      <option value="2000">Every 2 seconds</option>
-                      <option value="5000">Every 5 seconds</option>
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-            ) : null}
 
             {mutationError ? (
               <div
