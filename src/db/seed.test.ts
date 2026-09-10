@@ -4,6 +4,7 @@ import {
   seededDrivers,
   seededVehicles,
   seededVendors,
+  shouldResetDatabase,
 } from "./seed";
 
 describe("realistic UAE seed data", () => {
@@ -57,5 +58,10 @@ describe("realistic UAE seed data", () => {
         seededVendors.some(({ id }) => id === vendorId),
       ),
     ).toBe(true);
+  });
+
+  it("recognizes the explicit database reset flag", () => {
+    expect(shouldResetDatabase(["--reset-db"])).toBe(true);
+    expect(shouldResetDatabase(["--other-option"])).toBe(false);
   });
 });

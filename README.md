@@ -66,6 +66,16 @@ npm run db:seed
 npm run dev
 ```
 
+To truncate all application tables, reset identity sequences, and reload the
+deterministic dataset:
+
+```bash
+npm run db:seed -- --reset-db
+```
+
+The reset flag is destructive. Drizzle's migration history is intentionally
+preserved so applied migrations are not rerun.
+
 ## API
 
 ### Trips

@@ -4,7 +4,7 @@ import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./client";
 import { runMigrations } from "./migrate";
-import { seedDatabase, seedIds } from "./seed";
+import { resetDatabase, seedDatabase, seedIds } from "./seed";
 import {
   customers,
   drivers,
@@ -60,6 +60,33 @@ describe("database schema", () => {
     expect(vendorCount[0]?.count).toBe(5);
     expect(driverCount[0]?.count).toBe(10);
     expect(tripCount[0]?.count).toBe(1);
+  });
+
+  it("resets every application table before reseeding", async () => {
+    await database.db.insert(customers).values({
+      name: "Temporary Owner",
+      email: "temporary@example.com",
+    });
+    await database.db.insert(tripPositions).values({
+      tripId: seedIds.trip,
+      latitude: 25.2,
+      longitude: 55.3,
+      recordedAt: new Date(),
+      source: "vendor",
+    });
+
+    await resetDatabase(database.db);
+    await seedDatabase(database.db);
+
+    const customerCount = await database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(customers);
+    const positionCount = await database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tripPositions);
+
+    expect(customerCount[0]?.count).toBe(30);
+    expect(positionCount[0]?.count).toBe(0);
   });
 
   it("enforces coordinate constraints", async () => {

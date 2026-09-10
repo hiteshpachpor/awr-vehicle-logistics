@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { getEnvironment } from "@/config/env";
 import { createDatabase, type Database } from "./client";
 import {
@@ -173,6 +174,23 @@ export const seededDrivers = driverNames.map((name, index) => ({
   externalReference: `DRV-${String(index + 1).padStart(3, "0")}`,
 }));
 
+export function shouldResetDatabase(args: string[]) {
+  return args.includes("--reset-db");
+}
+
+export async function resetDatabase(db: Database) {
+  await db.execute(sql`
+    truncate table
+      trip_positions,
+      trips,
+      drivers,
+      logistics_vendors,
+      vehicles,
+      customers
+    restart identity cascade
+  `);
+}
+
 export async function seedDatabase(db: Database) {
   await db
     .insert(customers)
@@ -216,6 +234,9 @@ async function main() {
   const { db, pool } = createDatabase(getEnvironment().DATABASE_URL);
 
   try {
+    if (shouldResetDatabase(process.argv.slice(2))) {
+      await resetDatabase(db);
+    }
     await seedDatabase(db);
   } finally {
     await pool.end();
