@@ -101,8 +101,10 @@ export const trips = pgTable(
     vehicleId: uuid("vehicle_id")
       .notNull()
       .references(() => vehicles.id, { onDelete: "restrict" }),
-    driverId: uuid("driver_id")
+    vendorId: uuid("vendor_id")
       .notNull()
+      .references(() => logisticsVendors.id, { onDelete: "restrict" }),
+    driverId: uuid("driver_id")
       .references(() => drivers.id, { onDelete: "restrict" }),
     status: text("status").$type<TripStatus>().default("created").notNull(),
     pickupAddress: text("pickup_address").notNull(),
@@ -213,6 +215,7 @@ export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
 
 export const vendorsRelations = relations(logisticsVendors, ({ many }) => ({
   drivers: many(drivers),
+  trips: many(trips),
 }));
 
 export const driversRelations = relations(drivers, ({ one, many }) => ({
@@ -231,6 +234,10 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   driver: one(drivers, {
     fields: [trips.driverId],
     references: [drivers.id],
+  }),
+  vendor: one(logisticsVendors, {
+    fields: [trips.vendorId],
+    references: [logisticsVendors.id],
   }),
   positions: many(tripPositions),
 }));

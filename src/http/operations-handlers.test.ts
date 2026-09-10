@@ -1,14 +1,19 @@
+import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import type { AppContainer } from "@/lib/container";
 import {
+  listCustomersHandler,
   listDriversHandler,
+  listVendorsHandler,
   listVehiclesHandler,
 } from "./operations-handlers";
 
 function container() {
   return {
     operationsService: {
+      listCustomers: vi.fn(),
       listVehicles: vi.fn(),
+      listVendors: vi.fn(),
       listDrivers: vi.fn(),
     },
   } as unknown as AppContainer;
@@ -28,11 +33,39 @@ describe("operations HTTP handlers", () => {
       },
     ]);
 
-    const response = await listVehiclesHandler(app);
+    const response = await listVehiclesHandler(
+      new NextRequest(
+        "http://localhost/api/vehicles?customerId=00000000-0000-4000-8000-000000000001",
+      ),
+      app,
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       data: [{ registrationNumber: "DUBAI-A-48291" }],
+    });
+    expect(app.operationsService.listVehicles).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000001",
+    );
+  });
+
+  it("returns customer and active vendor options", async () => {
+    const app = container();
+    vi.mocked(app.operationsService.listCustomers).mockResolvedValue([
+      { id: "customer-id", name: "Omar Al Mansoori" },
+    ]);
+    vi.mocked(app.operationsService.listVendors).mockResolvedValue([
+      { id: "vendor-id", name: "Crescent Dune Logistics" },
+    ]);
+
+    const customersResponse = await listCustomersHandler(app);
+    const vendorsResponse = await listVendorsHandler(app);
+
+    expect(await customersResponse.json()).toEqual({
+      data: [{ id: "customer-id", name: "Omar Al Mansoori" }],
+    });
+    expect(await vendorsResponse.json()).toEqual({
+      data: [{ id: "vendor-id", name: "Crescent Dune Logistics" }],
     });
   });
 

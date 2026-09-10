@@ -75,6 +75,7 @@ describe("database schema", () => {
           id: `00000000-0000-4000-9000-00000000000${index + 1}`,
           referenceNumber: `TRIP-ACTIVE-${index + 1}`,
           vehicleId: seedIds.vehicle,
+          vendorId: seedIds.vendor,
           driverId: seedIds.driver,
           status: status as "created" | "in_transit",
           pickupAddress: "Dubai",
@@ -92,6 +93,7 @@ describe("database schema", () => {
         id: "00000000-0000-4000-9000-000000000003",
         referenceNumber: "TRIP-COMPLETED-1",
         vehicleId: seedIds.vehicle,
+        vendorId: seedIds.vendor,
         driverId: seedIds.driver,
         status: "completed",
         pickupAddress: "Dubai",
@@ -113,6 +115,7 @@ describe("database schema", () => {
           id: `00000000-0000-4000-9000-00000000001${index + 1}`,
           referenceNumber: `TRIP-DRIVER-ACTIVE-${index + 1}`,
           vehicleId: otherVehicle.id,
+          vendorId: seedIds.vendor,
           driverId: seedIds.driver,
           status: status as "created" | "in_transit",
           pickupAddress: "Dubai",
@@ -130,6 +133,7 @@ describe("database schema", () => {
         id: "00000000-0000-4000-9000-000000000013",
         referenceNumber: "TRIP-DRIVER-COMPLETED-1",
         vehicleId: otherVehicle.id,
+        vendorId: seedIds.vendor,
         driverId: seedIds.driver,
         status: "completed",
         pickupAddress: "Dubai",
@@ -140,6 +144,32 @@ describe("database schema", () => {
         dropoffLongitude: 55.4,
       }),
     ).resolves.toBeDefined();
+  });
+
+  it("stores a vendor assignment without requiring a driver", async () => {
+    const [created] = await database.db
+      .insert(trips)
+      .values({
+        id: "00000000-0000-4000-9000-000000000020",
+        referenceNumber: "TRIP-UNASSIGNED-1",
+        vehicleId: seededVehicles[2]!.id,
+        vendorId: seedIds.vendor,
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      })
+      .returning();
+
+    const details = await new TripRepository(database.db).findById(created!.id);
+
+    expect(details).toMatchObject({
+      trip: { vendorId: seedIds.vendor, driverId: null },
+      vendor: { id: seedIds.vendor },
+      driver: null,
+    });
   });
 
   it("resets every application table before reseeding", async () => {
@@ -237,9 +267,13 @@ describe("database schema", () => {
     const operationsRepository = new OperationsRepository(database.db);
 
     const vehicleOptions = await operationsRepository.listVehicles();
+    const customers = await operationsRepository.listCustomers();
+    const vendors = await operationsRepository.listActiveVendors();
     const driverOptions = await operationsRepository.listActiveDrivers();
 
+    expect(customers).toHaveLength(30);
     expect(vehicleOptions).toHaveLength(30);
+    expect(vendors).toHaveLength(5);
     expect(vehicleOptions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

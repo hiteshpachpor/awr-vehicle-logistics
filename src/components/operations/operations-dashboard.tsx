@@ -12,14 +12,11 @@ import { Button } from "@/components/ui/button";
 import { useTripEvents } from "@/hooks/use-trip-events";
 import type {
   ApiErrorBody,
-  DriverOption,
   Position,
   TripStatus,
   TripView,
-  VehicleOption,
 } from "@/lib/operations-types";
 import { getApiErrorMessage, matchesTrip } from "@/lib/operations-ui";
-import { CreateTripDialog } from "./create-trip-dialog";
 import { LocationPingLog } from "./location-ping-log";
 import { OperationsMap } from "./operations-map";
 import { TripInspector } from "./trip-inspector";
@@ -39,11 +36,6 @@ export function OperationsDashboard({
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | TripStatus>("all");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
-  const [drivers, setDrivers] = useState<DriverOption[]>([]);
-  const [optionsLoading, setOptionsLoading] = useState(false);
-  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [positionLog, setPositionLog] = useState<Position[]>([]);
@@ -95,45 +87,6 @@ export function OperationsDashboard({
     }, 0);
     return () => window.clearTimeout(initialLoad);
   }, [loadTrips]);
-
-  useEffect(() => {
-    if (!createOpen || vehicles.length || optionsLoading) return;
-
-    async function loadOptions() {
-      setOptionsLoading(true);
-      setOptionsError(null);
-      try {
-        const [vehiclesResponse, driversResponse] = await Promise.all([
-          fetch("/api/vehicles", { cache: "no-store" }),
-          fetch("/api/drivers", { cache: "no-store" }),
-        ]);
-        const vehiclesBody = (await vehiclesResponse.json()) as
-          | { data: VehicleOption[] }
-          | ApiErrorBody;
-        const driversBody = (await driversResponse.json()) as
-          | { data: DriverOption[] }
-          | ApiErrorBody;
-        if (!vehiclesResponse.ok || !("data" in vehiclesBody)) {
-          throw new Error(getApiErrorMessage(vehiclesBody as ApiErrorBody));
-        }
-        if (!driversResponse.ok || !("data" in driversBody)) {
-          throw new Error(getApiErrorMessage(driversBody as ApiErrorBody));
-        }
-        setVehicles(vehiclesBody.data);
-        setDrivers(driversBody.data);
-      } catch (error) {
-        setOptionsError(
-          error instanceof Error
-            ? error.message
-            : "Vehicle and driver options could not be loaded.",
-        );
-      } finally {
-        setOptionsLoading(false);
-      }
-    }
-
-    void loadOptions();
-  }, [createOpen, drivers.length, optionsLoading, vehicles.length]);
 
   useEffect(() => {
     if (!focused || !selectedId) return;
@@ -388,10 +341,12 @@ export function OperationsDashboard({
               className={loading ? "animate-spin" : ""}
             />
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon size={17} weight="bold" />
-            <span className="hidden sm:inline">New trip</span>
-            <span className="sm:hidden">New</span>
+          <Button asChild>
+            <Link href="/ops/trips/new">
+              <PlusIcon size={17} weight="bold" />
+              <span className="hidden sm:inline">New trip</span>
+              <span className="sm:hidden">New</span>
+            </Link>
           </Button>
         </div>
       </header>
@@ -474,16 +429,6 @@ export function OperationsDashboard({
           </div>
         )
       )}
-
-      <CreateTripDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        vehicles={vehicles}
-        drivers={drivers}
-        optionsLoading={optionsLoading}
-        optionsError={optionsError}
-        onCreated={replaceTrip}
-      />
     </main>
   );
 }

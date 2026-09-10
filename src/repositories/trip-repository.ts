@@ -29,7 +29,7 @@ export type TripDetails = {
     id: string;
     name: string;
     phone: string | null;
-  };
+  } | null;
   vendor: {
     id: string;
     name: string;
@@ -77,10 +77,10 @@ export class TripRepository {
       .from(trips)
       .innerJoin(vehicles, eq(trips.vehicleId, vehicles.id))
       .innerJoin(customers, eq(vehicles.customerId, customers.id))
-      .innerJoin(drivers, eq(trips.driverId, drivers.id))
+      .leftJoin(drivers, eq(trips.driverId, drivers.id))
       .innerJoin(
         logisticsVendors,
-        eq(drivers.vendorId, logisticsVendors.id),
+        eq(trips.vendorId, logisticsVendors.id),
       )
       .where(eq(trips.id, id))
       .limit(1);
@@ -94,10 +94,10 @@ export class TripRepository {
       .from(trips)
       .innerJoin(vehicles, eq(trips.vehicleId, vehicles.id))
       .innerJoin(customers, eq(vehicles.customerId, customers.id))
-      .innerJoin(drivers, eq(trips.driverId, drivers.id))
+      .leftJoin(drivers, eq(trips.driverId, drivers.id))
       .innerJoin(
         logisticsVendors,
-        eq(drivers.vendorId, logisticsVendors.id),
+        eq(trips.vendorId, logisticsVendors.id),
       )
       .$dynamic();
 

@@ -102,12 +102,15 @@ preserved so applied migrations are not rerun.
 ### Operations lookups
 
 ```text
-GET /api/vehicles
+GET /api/customers
+GET /api/vehicles?customerId=:id
+GET /api/vendors
 GET /api/drivers
 ```
 
-These endpoints provide vehicle and active-driver options with their related
-customer and logistics-vendor details for the operations trip form.
+These endpoints provide customer, vehicle, active-vendor, and active-driver
+options for operations workflows. New trips are assigned to a vendor; that
+vendor assigns a driver separately.
 
 ### Trips
 
@@ -124,7 +127,7 @@ Create a trip:
 ```json
 {
   "vehicleId": "00000000-0000-4000-8000-000000000002",
-  "driverId": "00000000-0000-4000-8000-000000000004",
+  "vendorId": "00000000-0000-4000-8000-000000000003",
   "pickup": {
     "address": "AWR Showroom, Dubai",
     "lat": 25.2048,

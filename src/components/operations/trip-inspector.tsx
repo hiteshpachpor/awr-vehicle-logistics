@@ -67,7 +67,11 @@ export function TripInspector({
   focused?: boolean;
 }) {
   const [intervalMs, setIntervalMs] = useState("1000");
-  const actions = trip ? availableTripActions(trip.trip.status) : [];
+  const actions = trip
+    ? availableTripActions(trip.trip.status).filter(
+        (action) => action !== "start" || Boolean(trip.driver),
+      )
+    : [];
 
   if (!trip) {
     return (
@@ -143,8 +147,12 @@ export function TripInspector({
           <DetailItem
             icon={<UserIcon />}
             label="Driver"
-            value={trip.driver.name}
-            detail={trip.driver.phone ?? "No phone recorded"}
+            value={trip.driver?.name ?? "Not assigned yet"}
+            detail={
+              trip.driver
+                ? (trip.driver.phone ?? "No phone recorded")
+                : "The logistics vendor will assign a driver."
+            }
           />
           <DetailItem
             icon={<BuildingsIcon />}

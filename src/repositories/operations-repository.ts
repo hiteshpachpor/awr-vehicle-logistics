@@ -19,6 +19,16 @@ export type OperationsVehicle = {
   };
 };
 
+export type OperationsCustomer = {
+  id: string;
+  name: string;
+};
+
+export type OperationsVendor = {
+  id: string;
+  name: string;
+};
+
 export type OperationsDriver = {
   id: string;
   name: string;
@@ -33,8 +43,18 @@ export type OperationsDriver = {
 export class OperationsRepository {
   constructor(private readonly db: Database) {}
 
-  listVehicles(): Promise<OperationsVehicle[]> {
+  listCustomers(): Promise<OperationsCustomer[]> {
     return this.db
+      .select({
+        id: customers.id,
+        name: customers.name,
+      })
+      .from(customers)
+      .orderBy(asc(customers.name));
+  }
+
+  listVehicles(customerId?: string): Promise<OperationsVehicle[]> {
+    const query = this.db
       .select({
         id: vehicles.id,
         registrationNumber: vehicles.registrationNumber,
@@ -48,7 +68,22 @@ export class OperationsRepository {
       })
       .from(vehicles)
       .innerJoin(customers, eq(vehicles.customerId, customers.id))
+      .$dynamic();
+
+    return query
+      .where(customerId ? eq(vehicles.customerId, customerId) : undefined)
       .orderBy(asc(vehicles.registrationNumber));
+  }
+
+  listActiveVendors(): Promise<OperationsVendor[]> {
+    return this.db
+      .select({
+        id: logisticsVendors.id,
+        name: logisticsVendors.name,
+      })
+      .from(logisticsVendors)
+      .where(eq(logisticsVendors.active, true))
+      .orderBy(asc(logisticsVendors.name));
   }
 
   listActiveDrivers(): Promise<OperationsDriver[]> {

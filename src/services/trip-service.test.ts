@@ -14,6 +14,7 @@ function tripDetails(status: Trip["status"] = "created"): TripDetails {
       id: "00000000-0000-4000-8000-000000000001",
       referenceNumber: "TRIP-1",
       vehicleId: "00000000-0000-4000-8000-000000000002",
+      vendorId: "00000000-0000-4000-8000-000000000004",
       driverId: "00000000-0000-4000-8000-000000000003",
       status,
       pickupAddress: "Dubai",
@@ -62,6 +63,25 @@ describe("TripService", () => {
     await expect(service.transition("trip", "in_transit")).rejects.toBeInstanceOf(
       InvalidStateTransitionError,
     );
+  });
+
+  it("requires a driver before starting a trip", async () => {
+    const unassigned = tripDetails("created");
+    unassigned.trip.driverId = null;
+    unassigned.driver = null;
+    const repository = {
+      findById: vi.fn().mockResolvedValue(unassigned),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn(),
+    } as unknown as PositionRepository;
+    const service = new TripService(repository, positions);
+
+    await expect(
+      service.transition(unassigned.trip.id, "in_transit"),
+    ).rejects.toMatchObject({
+      code: "DRIVER_NOT_ASSIGNED",
+    });
   });
 
   it("updates a valid transition using optimistic concurrency", async () => {

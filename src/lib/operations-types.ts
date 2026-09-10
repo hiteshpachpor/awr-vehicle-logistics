@@ -21,7 +21,8 @@ export type TripView = {
     id: string;
     referenceNumber: string;
     vehicleId: string;
-    driverId: string;
+    vendorId: string;
+    driverId: string | null;
     status: TripStatus;
     pickupAddress: string;
     pickupLatitude: number;
@@ -45,7 +46,7 @@ export type TripView = {
     color: string | null;
   };
   customer: { id: string; name: string };
-  driver: { id: string; name: string; phone: string | null };
+  driver: { id: string; name: string; phone: string | null } | null;
   vendor: { id: string; name: string };
   latestPosition: Position | null;
 };
@@ -57,6 +58,16 @@ export type VehicleOption = {
   model: string;
   color: string | null;
   customer: { id: string; name: string };
+};
+
+export type CustomerOption = {
+  id: string;
+  name: string;
+};
+
+export type VendorOption = {
+  id: string;
+  name: string;
 };
 
 export type DriverOption = {
@@ -77,7 +88,7 @@ export type ApiErrorBody = {
 
 export type CreateTripPayload = {
   vehicleId: string;
-  driverId: string;
+  vendorId: string;
   referenceNumber?: string;
   scheduledAt?: string;
   pickup: { address: string; lat: number; lng: number };

@@ -1,36 +1,32 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CircleNotchIcon,
   LinkIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { SearchSelect } from "./search-select";
 import { getApiErrorMessage } from "@/lib/operations-ui";
 import type {
   ApiErrorBody,
   CreateTripPayload,
-  DriverOption,
+  CustomerOption,
   GoogleMapsLocationResponse,
   TripView,
   VehicleOption,
+  VendorOption,
 } from "@/lib/operations-types";
 
 const inputClass =
   "h-11 w-full rounded-[10px] border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50";
 
 type FormState = {
+  customerId: string;
   vehicleId: string;
-  driverId: string;
+  vendorId: string;
   referenceNumber: string;
   scheduledAt: string;
   pickupAddress: string;
@@ -42,8 +38,9 @@ type FormState = {
 };
 
 const initialForm: FormState = {
+  customerId: "",
   vehicleId: "",
-  driverId: "",
+  vendorId: "",
   referenceNumber: "",
   scheduledAt: "",
   pickupAddress: "",
@@ -54,30 +51,110 @@ const initialForm: FormState = {
   dropoffLng: "",
 };
 
-export function CreateTripDialog({
-  open,
-  onOpenChange,
-  vehicles,
-  drivers,
-  optionsLoading,
-  optionsError,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  vehicles: VehicleOption[];
-  drivers: DriverOption[];
-  optionsLoading: boolean;
-  optionsError: string | null;
-  onCreated: (trip: TripView) => void;
-}) {
+export function CreateTripForm() {
+  const router = useRouter();
+  const selectedCustomerRef = useRef("");
   const [form, setForm] = useState(initialForm);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const update = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadOptions() {
+      try {
+        const [customersResponse, vendorsResponse] = await Promise.all([
+          fetch("/api/customers", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          fetch("/api/vendors", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+        ]);
+        const customersBody = (await customersResponse.json()) as
+          | { data: CustomerOption[] }
+          | ApiErrorBody;
+        const vendorsBody = (await vendorsResponse.json()) as
+          | { data: VendorOption[] }
+          | ApiErrorBody;
+        if (!customersResponse.ok || !("data" in customersBody)) {
+          throw new Error(getApiErrorMessage(customersBody as ApiErrorBody));
+        }
+        if (!vendorsResponse.ok || !("data" in vendorsBody)) {
+          throw new Error(getApiErrorMessage(vendorsBody as ApiErrorBody));
+        }
+        setCustomers(customersBody.data);
+        setVendors(vendorsBody.data);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setOptionsError(
+          error instanceof Error
+            ? error.message
+            : "Customers and vendors could not be loaded.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setOptionsLoading(false);
+      }
+    }
+
+    void loadOptions();
+    return () => controller.abort();
+  }, []);
+
+  async function selectCustomer(customerId: string) {
+    selectedCustomerRef.current = customerId;
+    setForm((current) => ({
+      ...current,
+      customerId,
+      vehicleId: "",
+    }));
+    setVehicles([]);
+    setVehiclesLoading(true);
+    setVehicleError(null);
+
+    try {
+      const response = await fetch(
+        `/api/vehicles?customerId=${encodeURIComponent(customerId)}`,
+        { cache: "no-store" },
+      );
+      const body = (await response.json()) as
+        | { data: VehicleOption[] }
+        | ApiErrorBody;
+      if (!response.ok || !("data" in body)) {
+        throw new Error(getApiErrorMessage(body as ApiErrorBody));
+      }
+      if (selectedCustomerRef.current !== customerId) return;
+      setVehicles(body.data);
+      setForm((current) => ({
+        ...current,
+        vehicleId: body.data[0]?.id ?? "",
+      }));
+    } catch (error) {
+      if (selectedCustomerRef.current !== customerId) return;
+      setVehicleError(
+        error instanceof Error
+          ? error.message
+          : "Vehicles could not be loaded.",
+      );
+    } finally {
+      if (selectedCustomerRef.current === customerId) {
+        setVehiclesLoading(false);
+      }
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,7 +163,7 @@ export function CreateTripDialog({
 
     const payload: CreateTripPayload = {
       vehicleId: form.vehicleId,
-      driverId: form.driverId,
+      vendorId: form.vendorId,
       ...(form.referenceNumber.trim()
         ? { referenceNumber: form.referenceNumber.trim() }
         : {}),
@@ -115,9 +192,7 @@ export function CreateTripDialog({
       if (!response.ok) {
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
-      onCreated(body as TripView);
-      setForm(initialForm);
-      onOpenChange(false);
+      router.push(`/trips/${(body as TripView).trip.id}`);
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "The trip could not be created.",
@@ -128,17 +203,8 @@ export function CreateTripDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create a trip</DialogTitle>
-          <DialogDescription>
-            Assign a vehicle and driver, then define the collection route.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form className="mt-6 grid gap-6" onSubmit={handleSubmit}>
-          {optionsError ? (
+    <form className="grid gap-6" onSubmit={handleSubmit}>
+          {optionsError || vehicleError ? (
             <div
               role="alert"
               className="flex items-start gap-2 rounded-[10px] border border-destructive/30 bg-destructive/5 p-3 text-sm"
@@ -147,11 +213,27 @@ export function CreateTripDialog({
                 size={18}
                 className="mt-0.5 shrink-0 text-destructive"
               />
-              {optionsError}
+              {optionsError ?? vehicleError}
             </div>
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Customer" htmlFor="customer-select">
+              <SearchSelect
+                id="customer-select"
+                value={form.customerId}
+                onValueChange={(value) => void selectCustomer(value)}
+                options={customers.map((customer) => ({
+                  value: customer.id,
+                  label: customer.name,
+                }))}
+                placeholder={
+                  optionsLoading ? "Loading customers..." : "Select customer"
+                }
+                searchPlaceholder="Search customers"
+                disabled={optionsLoading || Boolean(optionsError)}
+              />
+            </Field>
             <Field label="Vehicle" htmlFor="vehicle-select">
               <SearchSelect
                 id="vehicle-select"
@@ -160,35 +242,42 @@ export function CreateTripDialog({
                 options={vehicles.map((vehicle) => ({
                   value: vehicle.id,
                   label: vehicle.registrationNumber,
-                  description: `${vehicle.make} ${vehicle.model}, ${vehicle.customer.name}`,
-                  searchText: `${vehicle.color ?? ""} ${vehicle.customer.name}`,
+                  description: `${vehicle.make} ${vehicle.model}`,
+                  searchText: vehicle.color ?? "",
                 }))}
                 placeholder={
-                  optionsLoading ? "Loading vehicles..." : "Select vehicle"
+                  !form.customerId
+                    ? "Select a customer first"
+                    : vehiclesLoading
+                      ? "Loading vehicles..."
+                      : "Select vehicle"
                 }
-                searchPlaceholder="Search registration or owner"
-                disabled={optionsLoading || Boolean(optionsError)}
-              />
-            </Field>
-            <Field label="Driver" htmlFor="driver-select">
-              <SearchSelect
-                id="driver-select"
-                value={form.driverId}
-                onValueChange={(value) => update("driverId", value)}
-                options={drivers.map((driver) => ({
-                  value: driver.id,
-                  label: driver.name,
-                  description: driver.vendor.name,
-                  searchText: `${driver.externalReference ?? ""} ${driver.phone ?? ""}`,
-                }))}
-                placeholder={
-                  optionsLoading ? "Loading drivers..." : "Select driver"
+                searchPlaceholder="Search registration or model"
+                disabled={
+                  !form.customerId ||
+                  vehiclesLoading ||
+                  Boolean(vehicleError)
                 }
-                searchPlaceholder="Search driver or vendor"
-                disabled={optionsLoading || Boolean(optionsError)}
               />
             </Field>
           </div>
+
+          <Field label="Logistics vendor" htmlFor="vendor-select">
+            <SearchSelect
+              id="vendor-select"
+              value={form.vendorId}
+              onValueChange={(value) => update("vendorId", value)}
+              options={vendors.map((vendor) => ({
+                value: vendor.id,
+                label: vendor.name,
+              }))}
+              placeholder={
+                optionsLoading ? "Loading vendors..." : "Select vendor"
+              }
+              searchPlaceholder="Search vendors"
+              disabled={optionsLoading || Boolean(optionsError)}
+            />
+          </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -249,7 +338,7 @@ export function CreateTripDialog({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => onOpenChange(false)}
+              onClick={() => router.back()}
             >
               Cancel
             </Button>
@@ -259,15 +348,13 @@ export function CreateTripDialog({
                 submitting ||
                 optionsLoading ||
                 !form.vehicleId ||
-                !form.driverId
+                !form.vendorId
               }
             >
               {submitting ? "Creating..." : "Create trip"}
             </Button>
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+    </form>
   );
 }
 

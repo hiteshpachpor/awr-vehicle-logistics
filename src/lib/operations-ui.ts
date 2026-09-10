@@ -32,7 +32,7 @@ export function matchesTrip(trip: TripView, query: string) {
     trip.vehicle.make,
     trip.vehicle.model,
     trip.customer.name,
-    trip.driver.name,
+    trip.driver?.name ?? "",
     trip.vendor.name,
     trip.trip.pickupAddress,
     trip.trip.dropoffAddress,

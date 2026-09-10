@@ -44,7 +44,7 @@ export class TripService {
         input.referenceNumber ??
         `TRIP-${now.toISOString().slice(0, 10).replaceAll("-", "")}-${this.makeId().slice(0, 8).toUpperCase()}`,
       vehicleId: input.vehicleId,
-      driverId: input.driverId,
+      vendorId: input.vendorId,
       pickupAddress: input.pickup.address,
       pickupLatitude: input.pickup.lat,
       pickupLongitude: input.pickup.lng,
@@ -88,6 +88,12 @@ export class TripService {
 
     if (!canTransition(existing.trip.status, status)) {
       throw new InvalidStateTransitionError(existing.trip.status, status);
+    }
+    if (status === "in_transit" && !existing.trip.driverId) {
+      throw new ConflictError(
+        "A driver must be assigned before the trip can start",
+        "DRIVER_NOT_ASSIGNED",
+      );
     }
 
     const updated = await this.trips.updateStatus(

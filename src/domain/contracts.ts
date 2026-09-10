@@ -9,7 +9,7 @@ const coordinatesSchema = z.object({
 
 export const createTripSchema = z.object({
   vehicleId: z.uuid(),
-  driverId: z.uuid(),
+  vendorId: z.uuid(),
   referenceNumber: z.string().trim().min(1).max(100).optional(),
   pickup: coordinatesSchema,
   dropoff: coordinatesSchema,

@@ -9,7 +9,7 @@ describe("API contracts", () => {
   it("accepts a valid trip", () => {
     const result = createTripSchema.safeParse({
       vehicleId: "00000000-0000-4000-8000-000000000001",
-      driverId: "00000000-0000-4000-8000-000000000002",
+      vendorId: "00000000-0000-4000-8000-000000000002",
       pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
       dropoff: { address: "Sharjah", lat: 25.35, lng: 55.42 },
     });

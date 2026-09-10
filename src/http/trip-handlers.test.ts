@@ -39,7 +39,7 @@ describe("trip HTTP handlers", () => {
       method: "POST",
       body: JSON.stringify({
         vehicleId: "00000000-0000-4000-8000-000000000002",
-        driverId: "00000000-0000-4000-8000-000000000003",
+        vendorId: "00000000-0000-4000-8000-000000000003",
         pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
         dropoff: { address: "Sharjah", lat: 25.3, lng: 55.4 },
       }),
@@ -64,7 +64,7 @@ describe("trip HTTP handlers", () => {
       method: "POST",
       body: JSON.stringify({
         vehicleId: "00000000-0000-4000-8000-000000000002",
-        driverId: "00000000-0000-4000-8000-000000000003",
+        vendorId: "00000000-0000-4000-8000-000000000003",
         pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
         dropoff: { address: "Sharjah", lat: 25.3, lng: 55.4 },
       }),
@@ -93,7 +93,7 @@ describe("trip HTTP handlers", () => {
       method: "POST",
       body: JSON.stringify({
         vehicleId: "00000000-0000-4000-8000-000000000002",
-        driverId: "00000000-0000-4000-8000-000000000003",
+        vendorId: "00000000-0000-4000-8000-000000000003",
         pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
         dropoff: { address: "Sharjah", lat: 25.3, lng: 55.4 },
       }),

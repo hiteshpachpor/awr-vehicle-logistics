@@ -218,6 +218,7 @@ export async function seedDatabase(db: Database) {
       id: seedIds.trip,
       referenceNumber: "TRIP-DEMO-001",
       vehicleId: seedIds.vehicle,
+      vendorId: seedIds.vendor,
       driverId: seedIds.driver,
       status: "created",
       pickupAddress: "AWR Showroom, Sheikh Zayed Road, Dubai",
