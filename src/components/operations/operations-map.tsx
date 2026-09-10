@@ -50,8 +50,12 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
       "top-right",
     );
     map.on("load", () => setReady(true));
-    map.on("error", () => {
-      setMapError("The map could not be loaded. Trip details remain available.");
+    map.on("error", (event) => {
+      console.error("Mapbox error:", event.error);
+      setMapError(
+        event.error?.message ??
+          "The map could not be loaded. Trip details remain available.",
+      );
     });
     mapRef.current = map;
 
@@ -160,7 +164,7 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
 
   return (
     <div className="relative h-full min-h-72 bg-surface-strong">
-      <div ref={containerRef} className="absolute inset-0" />
+      <div ref={containerRef} className="h-full w-full" />
       {!trip ? (
         <div className="pointer-events-none absolute inset-0 grid place-items-center bg-background/70 p-8 text-center backdrop-blur-sm">
           <div>
