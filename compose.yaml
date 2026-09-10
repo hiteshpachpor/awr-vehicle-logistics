@@ -1,0 +1,41 @@
+services:
+  database:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: awr
+      POSTGRES_USER: awr
+      POSTGRES_PASSWORD: awr
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awr -d awr"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  application:
+    build: .
+    environment:
+      DATABASE_URL: postgres://awr:awr@database:5432/awr
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  postgres-data:
