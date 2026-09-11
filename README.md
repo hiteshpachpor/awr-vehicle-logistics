@@ -1,45 +1,65 @@
 # AWR Vehicle Live Tracking
 
-Backend foundation for the AWR vehicle live-tracking assignment. It provides
-trip management, vendor location ingestion, PostgreSQL-backed SSE delivery, and
-a trip simulator that follows the mapped driving route.
+AWR works with logistics vendors who pick up and drop off customer vehicles. Once a trip is on the road, operations needs to see where that vehicle is — not a spreadsheet, a live map.
 
-## Architecture
+This app is that view. Operations creates a trip, a vendor assigns a driver, and the driver either shares phone GPS or runs a simulated journey along the real driving route. Positions land on a dashboard in real time: list, map, and a log of every ping.
 
-The application runs as a long-lived Next.js Node process with PostgreSQL as
-its source of truth.
+Open [docs/index.md](docs/index.md) for the original brief, what we built beyond it, the technical decisions, and the API.
 
-```text
-Driver → location API → trip_positions → PostgreSQL NOTIFY
-                                             ↓
-Dashboard ← SSE endpoint ← PostgreSQL LISTEN + database replay
-```
+## Setup and installation
 
-Location ingestion is independent of connected dashboards. Notifications are
-lightweight and non-durable; position rows are durable. SSE clients reconnect
-with `Last-Event-ID`, and the server replays missed positions from PostgreSQL.
+You need **Docker with Docker Compose**, or **Node.js 22+ and PostgreSQL 17+**.
 
-## Requirements
+Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token. Without it the APIs still run; the map and driving-route simulator fall back to a straight line.
 
-- Docker with Docker Compose, or
-- Node.js 22+ and PostgreSQL 17+
-
-## Run with Docker
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-This starts PostgreSQL, waits for it to become healthy, applies migrations,
-loads deterministic demo data, and starts the application on
-<http://localhost:3000>.
+That starts PostgreSQL, waits until it is healthy, applies migrations, loads the demo dataset, and serves the app at [http://localhost:3000](http://localhost:3000).
 
-The seed contains 30 fictional UAE vehicle owners, one vehicle per owner, five
-imaginary logistics vendors, ten drivers, and a ready-to-start trip. Vehicle
-volume follows the requested distribution: Nissan 12, INFINITI 7, Renault 5,
-Chery 4, and Zeekr 2.
+For hot reload while you edit `src`:
 
-Primary seeded identifiers:
+```bash
+npm run docker:dev
+```
+
+Stop that stack with `npm run docker:down`. Wipe local data with `docker compose down --volumes`.
+
+### Local Node
+
+Start PostgreSQL yourself, then:
+
+```bash
+npm install
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+To empty the tables, reset identity sequences, and reload the same dataset:
+
+```bash
+npm run db:seed -- --reset-db
+```
+
+That flag is destructive. Drizzle’s migration history is left alone so applied migrations are not rerun.
+
+### Sign in
+
+Open `/` and use the password `password`.
+
+- **Operations** — create trips, assign work, cancel a trip that has not finished.
+- **Vendor controller** — assign drivers for that vendor.
+- **Driver** — start, simulate, or end an assigned trip. Simulated trips follow the mapped route; live trips share browser geolocation.
+
+The session is stored in the browser. APIs are unauthenticated on purpose.
+
+The seed is 30 fictional UAE vehicle owners (one vehicle each), five logistics vendors, ten drivers, and one ready-to-start trip. Makes are Nissan 12, INFINITI 7, Renault 5, Chery 4, and Zeekr 2.
+
+Stable ids:
 
 ```text
 Customer: 00000000-0000-4000-8000-000000000001
@@ -49,184 +69,21 @@ Driver:   00000000-0000-4000-8000-000000000004
 Trip:     00000000-0000-4000-8000-000000000005
 ```
 
-### Docker development with hot reload
+## Architecture and stack
 
-```bash
-npm run docker:dev
-```
-
-The development override bind-mounts the project into the container, keeps
-container-managed `node_modules` and `.next` volumes, and runs Next.js in
-development mode. Changes under `src` are reflected without rebuilding the
-image. Polling is enabled so file changes are detected reliably by Docker
-Desktop on macOS.
-
-Stop the development stack with:
-
-```bash
-npm run docker:down
-```
-
-Reset all local data:
-
-```bash
-docker compose down --volumes
-```
-
-## Run locally
-
-Copy `.env.example` to `.env`, start PostgreSQL, then run:
-
-```bash
-npm install
-npm run db:migrate
-npm run db:seed
-npm run dev
-```
-
-Set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token
-to enable the operations map.
-
-To truncate all application tables, reset identity sequences, and reload the
-deterministic dataset:
-
-```bash
-npm run db:seed -- --reset-db
-```
-
-The reset flag is destructive. Drizzle's migration history is intentionally
-preserved so applied migrations are not rerun.
-
-## Demo workspaces
-
-Open `/` and sign in with the password `password`.
-
-- AWR Operations uses `/ops/trips` and can create trips, assign drivers, and
-  cancel ready trips.
-- A vendor Controller uses `/vendor/:vendorId/trips` and can assign that
-  vendor's drivers.
-- A Driver uses `/vendor/:vendorId/driver/:driverId/trips`, can start, simulate,
-  and end assigned trips. Simulated trips follow the mapped route; real trips
-  share browser geolocation while in transit.
-
-The demo session is stored in the browser. APIs remain unauthenticated by
-design.
-
-## API
-
-### Operations lookups
+The app is a long-lived Next.js Node process. PostgreSQL is the source of truth for trips and positions. Location writes do not talk to dashboards directly; they notify the database, and SSE clients listen.
 
 ```text
-GET /api/customers
-GET /api/vehicles?customerId=:id
-GET /api/vendors
-GET /api/drivers
+Driver → location API → trip_positions → PostgreSQL NOTIFY
+                                             ↓
+Dashboard ← SSE endpoint ← PostgreSQL LISTEN + database replay
 ```
 
-These endpoints provide customer, vehicle, active-vendor, and active-driver
-options for operations workflows. New trips are assigned to a vendor; that
-vendor assigns a driver separately.
+Notifications are lightweight and not durable. Position rows are. If an SSE client reconnects with `Last-Event-ID`, missed points are replayed from PostgreSQL.
 
-### Trips
+The stack around that is Drizzle for the schema, Zod at the HTTP edge, Mapbox for the map and driving directions, and Vitest for tests.
 
-```text
-POST  /api/trips
-GET   /api/trips
-GET   /api/trips?status=in_transit
-GET   /api/trips?vendorId=:id
-GET   /api/trips?driverId=:id
-GET   /api/trips/:id
-PATCH /api/trips/:id
-```
-
-Create a trip:
-
-```json
-{
-  "vehicleId": "00000000-0000-4000-8000-000000000002",
-  "vendorId": "00000000-0000-4000-8000-000000000003",
-  "pickup": {
-    "address": "AWR Showroom, Dubai",
-    "lat": 25.2048,
-    "lng": 55.2708
-  },
-  "dropoff": {
-    "address": "Customer Address, Sharjah",
-    "lat": 25.3463,
-    "lng": 55.4209
-  }
-}
-```
-
-Start or complete a trip:
-
-```json
-{ "status": "in_transit" }
-```
-
-Assign a driver before the trip starts:
-
-```json
-{ "driverId": "00000000-0000-4000-8000-000000000004" }
-```
-
-Allowed transitions are `created → in_transit → completed`; created and
-in-transit trips may also be cancelled.
-
-### Location ingestion
-
-```text
-POST /api/trips/:id/location
-```
-
-```json
-{
-  "lat": 25.2048,
-  "lng": 55.2708,
-  "timestamp": "2026-09-10T18:00:00Z",
-  "speed": 12.5,
-  "eventId": "vendor-message-123"
-}
-```
-
-`eventId` is optional and provides idempotency within a trip. Device time is
-stored as `recorded_at`; server receipt time is stored separately.
-
-The driver workspace queues GPS pings while offline and POSTs them later with
-the original device `timestamp` and a stable `eventId`. `received_at` remains
-the time the server accepted the POST.
-
-### Live events
-
-```text
-GET /api/trips/:id/events
-Accept: text/event-stream
-Last-Event-ID: 42
-```
-
-The endpoint emits `position` events and heartbeat comments. The numeric
-position ID is the SSE cursor.
-
-### Simulator
-
-```text
-GET    /api/trips/:id/simulation
-POST   /api/trips/:id/simulation
-DELETE /api/trips/:id/simulation
-```
-
-Starting a simulation starts a scheduled trip, then walks the same Mapbox
-driving route shown on the map. The request body may include `intervalMs`
-(1,000–60,000) and `stepMeters` (100–20,000); omitted values default to a ping
-every 5 seconds advancing 1 km. It posts one GPS ping immediately at pickup and
-another at each interval, through the same ingestion service as vendor traffic.
-The reported speed is derived from those two values (3 km every 10 seconds is
-1,080 km/h). After the vehicle pings drop-off, the simulator waits one more
-interval and then completes the trip. If Mapbox directions are unavailable, the
-simulator falls back to a straight line between pickup and drop-off. Deleting
-stops the current simulation without completing the trip.
-
-## Quality checks
+## Testing
 
 ```bash
 npm run lint
@@ -236,15 +93,4 @@ npm run test:coverage
 npm run build
 ```
 
-Database integration tests use Testcontainers and therefore require a running
-Docker daemon. They apply migrations to a fresh PostgreSQL instance and verify
-constraints, idempotent seeding, and `LISTEN/NOTIFY`.
-
-## Production considerations
-
-This implementation intentionally targets the assignment's single-instance
-Docker deployment. The in-process simulator registry is not distributed. For a
-multi-instance production deployment, move simulation scheduling to a worker
-and replace PostgreSQL notifications with a durable broker or managed real-time
-service. Authentication, authorization, rate limiting, observability, and
-location-retention policies are presentation concerns and are not implemented.
+Database integration tests use Testcontainers, so they need a running Docker daemon. They apply migrations to a fresh PostgreSQL instance and check constraints, idempotent seeding, and `LISTEN/NOTIFY`.
