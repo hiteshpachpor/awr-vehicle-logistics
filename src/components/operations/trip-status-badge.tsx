@@ -17,7 +17,7 @@ export function TripStatusBadge({ status }: { status: TripStatus }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold",
+        "inline-flex h-5 shrink-0 items-center rounded-[5px] border px-1.5 text-[10px] font-medium leading-none uppercase tracking-[0.04em]",
         statusClassNames[status],
       )}
     >

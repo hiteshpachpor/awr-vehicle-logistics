@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DemoAuthProvider } from "@/components/auth/demo-auth-provider";
+import { IconProvider } from "@/components/icon-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <DemoAuthProvider>{children}</DemoAuthProvider>
+        <IconProvider>
+          <DemoAuthProvider>{children}</DemoAuthProvider>
+        </IconProvider>
       </body>
     </html>
   );

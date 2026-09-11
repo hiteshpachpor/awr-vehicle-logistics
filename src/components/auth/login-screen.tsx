@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  BuildingsIcon,
+  CubeIcon,
   ShieldCheckIcon,
   SteeringWheelIcon,
 } from "@phosphor-icons/react";
@@ -162,23 +162,25 @@ export function LoginScreen() {
   }
 
   return (
-    <main className="grid min-h-[100dvh] bg-background lg:grid-cols-[minmax(320px,0.8fr)_minmax(520px,1.2fr)]">
-      <section className="flex min-h-64 flex-col justify-between bg-[#292124] p-7 text-[#fffafa] sm:p-10 lg:p-12">
+    <main className="grid min-h-[100dvh] grid-rows-[auto_1fr] bg-background lg:grid-cols-[minmax(320px,0.8fr)_minmax(520px,1.2fr)] lg:grid-rows-1">
+      <section className="flex flex-col justify-between bg-[#292124] p-5 text-[#fffafa] sm:p-6 lg:min-h-64 lg:p-12">
         <span className="grid h-11 w-16 place-items-center rounded-[10px] bg-primary text-base font-semibold">
           AWR
         </span>
-        <div className="max-w-md py-12">
-          <p className="text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-4xl">
+        <div className="max-w-md pb-4 pt-8 sm:pb-5 sm:pt-10 lg:py-12">
+          <p className="text-2xl font-semibold leading-tight tracking-[-0.03em] sm:text-3xl lg:text-4xl">
             Vehicle movements, clear from handoff to delivery.
           </p>
-          <p className="mt-5 max-w-sm text-sm leading-6 text-[#d9cfd2]">
+          <p className="mt-3 max-w-sm text-sm leading-6 text-[#d9cfd2] lg:mt-5">
             A shared live workspace for AWR Operations and logistics partners.
           </p>
         </div>
-        <p className="text-xs text-[#b9adb1]">Demo operations environment</p>
+        <p className="hidden text-xs text-[#b9adb1] lg:block">
+          Demo operations environment
+        </p>
       </section>
 
-      <section className="grid place-items-center px-4 py-10 sm:px-8">
+      <section className="grid place-items-start px-4 py-8 sm:px-8 lg:place-items-center lg:py-10">
         <form
           className="w-full max-w-lg rounded-xl border border-border bg-surface p-5 shadow-[0_18px_50px_rgb(20_22_26/10%)] sm:p-8"
           onSubmit={handleSubmit}
@@ -191,7 +193,7 @@ export function LoginScreen() {
           <div className="mt-7 grid grid-cols-2 gap-2">
             <AccountButton
               active={accountType === "operations"}
-              icon={<ShieldCheckIcon size={19} />}
+              icon={<ShieldCheckIcon size={19} weight="duotone" />}
               label="AWR Operations"
               onClick={() => {
                 setAccountType("operations");
@@ -202,7 +204,7 @@ export function LoginScreen() {
             />
             <AccountButton
               active={accountType === "vendor"}
-              icon={<BuildingsIcon size={19} />}
+              icon={<CubeIcon size={19} weight="duotone" />}
               label="Logistics Vendor"
               onClick={() => {
                 setAccountType("vendor");
@@ -240,7 +242,7 @@ export function LoginScreen() {
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <AccountButton
                       active={vendorIdentity === "controller"}
-                      icon={<BuildingsIcon size={18} />}
+                      icon={<CubeIcon size={18} weight="duotone" />}
                       label="Controller"
                       onClick={() => {
                         setVendorIdentity("controller");
@@ -250,7 +252,7 @@ export function LoginScreen() {
                     />
                     <AccountButton
                       active={vendorIdentity === "driver"}
-                      icon={<SteeringWheelIcon size={18} />}
+                      icon={<SteeringWheelIcon size={18} weight="duotone" />}
                       label="Driver"
                       onClick={() => setVendorIdentity("driver")}
                     />
@@ -342,9 +344,9 @@ function AccountButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-14 items-center gap-2 rounded-[10px] border px-3 text-left text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "account-choice flex min-h-14 items-center gap-2 rounded-[10px] border px-3 text-left text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-primary bg-primary/8 text-foreground"
+          ? "border-primary bg-choice-selected text-choice-selected-foreground hover:bg-choice-selected-hover"
           : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >

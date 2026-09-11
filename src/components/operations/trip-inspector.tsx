@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeftIcon,
   BroadcastIcon,
-  BuildingsIcon,
+  CubeIcon,
   CalendarBlankIcon,
   CarIcon,
   CheckCircleIcon,
@@ -84,7 +84,7 @@ export function TripInspector({
       <aside className="min-h-72 bg-surface lg:border-l lg:border-border">
         <EmptyState
           className="h-full min-h-72 p-8"
-          icon={<CarIcon />}
+          icon={<CarIcon weight="duotone" />}
           title="No trip selected"
           description="Choose a trip to review its assignment and current status."
         />
@@ -116,22 +116,26 @@ export function TripInspector({
           </div>
           <TripStatusBadge status={trip.trip.status} />
         </div>
-        <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <BroadcastIcon
-            size={16}
-            weight={streamStatus === "live" ? "fill" : "regular"}
-            className={
-              streamStatus === "live" ? "text-primary" : "text-muted-foreground"
-            }
-          />
-          <span>{streamLabels[streamStatus]}</span>
-          {trip.latestPosition ? (
-            <span>
-              Last position{" "}
-              {formatRelativeTime(trip.latestPosition.recordedAt)}
-            </span>
-          ) : null}
-        </div>
+        {trip.trip.status === "in_transit" ? (
+          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <BroadcastIcon
+              size={16}
+              weight="duotone"
+              className={
+                streamStatus === "live"
+                  ? "text-primary"
+                  : "text-muted-foreground"
+              }
+            />
+            <span>{streamLabels[streamStatus]}</span>
+            {trip.latestPosition ? (
+              <span>
+                Last position{" "}
+                {formatRelativeTime(trip.latestPosition.recordedAt)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-6 p-5">
@@ -143,7 +147,7 @@ export function TripInspector({
                   disabled={mutating}
                   onClick={() => onTransition("in_transit")}
                 >
-                  <PlayIcon weight="fill" />
+                  <PlayIcon />
                   Start trip
                 </Button>
               ) : null}
@@ -152,7 +156,7 @@ export function TripInspector({
                   disabled={mutating}
                   onClick={() => onTransition("completed")}
                 >
-                  <CheckCircleIcon weight="bold" />
+                  <CheckCircleIcon />
                   End trip
                 </Button>
               ) : null}
@@ -195,18 +199,18 @@ export function TripInspector({
 
         <DetailGroup title="Assignment">
           <DetailItem
-            icon={<CarIcon />}
+            icon={<CarIcon weight="duotone" />}
             label="Vehicle"
             value={`${trip.vehicle.make} ${trip.vehicle.model}`}
             detail={`${trip.vehicle.registrationNumber}${trip.vehicle.color ? `, ${trip.vehicle.color}` : ""}`}
           />
           <DetailItem
-            icon={<UserIcon />}
+            icon={<UserIcon weight="duotone" />}
             label="Customer"
             value={trip.customer.name}
           />
           <DetailItem
-            icon={<UserIcon />}
+            icon={<UserIcon weight="duotone" />}
             label="Driver"
             value={trip.driver?.name ?? "Not assigned yet"}
             detail={
@@ -216,7 +220,7 @@ export function TripInspector({
             }
           />
           <DetailItem
-            icon={<BuildingsIcon />}
+            icon={<CubeIcon weight="duotone" />}
             label="Logistics vendor"
             value={trip.vendor.name}
           />
@@ -224,7 +228,7 @@ export function TripInspector({
 
         <DetailGroup title="Route">
           <DetailItem
-            icon={<MapPinIcon />}
+            icon={<MapPinIcon weight="duotone" />}
             label="Pickup"
             value={trip.trip.pickupAddress}
             detail={formatCoordinates(
@@ -233,7 +237,7 @@ export function TripInspector({
             )}
           />
           <DetailItem
-            icon={<MapPinIcon />}
+            icon={<MapPinIcon weight="duotone" />}
             label="Dropoff"
             value={trip.trip.dropoffAddress}
             detail={formatCoordinates(
@@ -242,7 +246,7 @@ export function TripInspector({
             )}
           />
           <DetailItem
-            icon={<CalendarBlankIcon />}
+            icon={<CalendarBlankIcon weight="duotone" />}
             label="Scheduled collection"
             value={formatDateTime(trip.trip.scheduledAt)}
           />

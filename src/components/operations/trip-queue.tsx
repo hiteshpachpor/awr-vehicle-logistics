@@ -3,8 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  CaretDownIcon,
   CaretRightIcon,
   CarIcon,
+  CubeIcon,
+  FlagCheckeredIcon,
   MagnifyingGlassIcon,
   MapPinIcon,
   SteeringWheelIcon,
@@ -53,7 +56,7 @@ export function TripQueue({
   onAssignDriver?: (tripId: string, driverId: string) => void;
 }) {
   return (
-    <section className="w-full max-w-6xl self-start">
+    <section className="w-full self-start">
       <div className="mb-5">
         <h2 className="text-xl font-semibold tracking-tight">Trips</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -99,64 +102,109 @@ export function TripQueue({
           </div>
         </div>
 
-        <div className="hidden grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] gap-5 border-b border-border bg-muted/35 px-5 py-2.5 text-xs font-semibold text-muted-foreground lg:grid">
-          <span>Trip</span>
-          <span>Route</span>
-          <span>Last update</span>
-          <span>Status</span>
-        </div>
-
-        <div className="p-2">
+        <div>
         {loading ? (
           <TripQueueSkeleton />
         ) : trips.length ? (
-          <ul className="grid gap-1">
+          <ul className="divide-y divide-border">
             {trips.map((trip) => (
               <li
                 key={trip.trip.id}
                 className={cn(
-                  "overflow-hidden rounded-[10px] border border-transparent transition-colors hover:border-border",
+                  "overflow-hidden transition-colors",
                   onAssignDriver &&
                     trip.trip.status === "created" &&
-                    "border-border",
+                    "bg-background/35",
                 )}
               >
                 <Link
                   href={`/trips/${trip.trip.id}`}
-                  className="group grid gap-4 px-3 py-4 outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:grid-cols-[minmax(170px,.75fr)_minmax(280px,1.5fr)_140px_110px] lg:items-center lg:gap-5 lg:px-3 lg:py-3"
+                  className="group relative grid p-4 outline-none transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring min-[560px]:grid-cols-[minmax(180px,.8fr)_minmax(260px,1.2fr)] min-[560px]:gap-x-5 sm:p-5 lg:grid-cols-[minmax(155px,.72fr)_minmax(260px,1.3fr)_minmax(210px,1fr)_max-content_32px] lg:items-center lg:gap-6"
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">
-                      {trip.customer.name}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CarIcon size={14} className="shrink-0" />
-                      {trip.vehicle.registrationNumber}
-                    </span>
-                  </span>
-
-                  <span className="flex min-w-0 items-start gap-2 text-sm leading-5">
-                    <MapPinIcon
-                      size={16}
-                      className="mt-0.5 shrink-0 text-muted-foreground"
-                    />
-                    <span className="line-clamp-2">
-                      {trip.trip.pickupAddress}{" "}
-                      <span className="text-muted-foreground">to</span>{" "}
-                      {trip.trip.dropoffAddress}
+                  <span className="flex min-w-0 items-start gap-3 pr-12 min-[560px]:pr-0">
+                    <span className="min-w-0">
+                      <span className="block truncate text-base font-semibold">
+                        {trip.customer.name}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
+                        {trip.vehicle.make} {trip.vehicle.model}
+                      </span>
+                      <span
+                        aria-label={`Registration ${trip.vehicle.registrationNumber}`}
+                        className="mt-2 inline-flex h-5 items-center rounded-[3px] border border-[#202124] bg-white px-1.5 text-[10px] font-semibold leading-none tracking-[0.06em] text-[#111214]"
+                      >
+                        {trip.vehicle.registrationNumber}
+                      </span>
                     </span>
                   </span>
 
-                  <span className="text-xs text-muted-foreground">
-                    <span className="lg:hidden">Updated </span>
-                    {formatRelativeTime(trip.trip.updatedAt)}
+                  <span className="mt-4 flex min-w-0 items-stretch gap-3 text-sm min-[560px]:mt-0">
+                    <span
+                      aria-hidden="true"
+                      className="flex w-6 shrink-0 flex-col items-center py-0.5"
+                    >
+                      <MapPinIcon
+                        size={18}
+                        weight="duotone"
+                        className="shrink-0 text-muted-foreground"
+                      />
+                      <span className="my-0.5 w-px min-h-2 flex-1 bg-muted-foreground/45" />
+                      <CaretDownIcon
+                        size={12}
+                        className="-my-[0.5em] shrink-0 text-muted-foreground"
+                      />
+                      <span className="my-0.5 w-px min-h-2 flex-1 bg-muted-foreground/45" />
+                      <FlagCheckeredIcon
+                        size={18}
+                        weight="duotone"
+                        className="shrink-0 text-primary"
+                      />
+                    </span>
+                    <span className="grid min-w-0 flex-1 content-between gap-3">
+                      <span className="min-w-0 leading-5">
+                        <span className="sr-only">Pickup </span>
+                        {trip.trip.pickupAddress}
+                      </span>
+                      <span className="min-w-0 leading-5">
+                        <span className="sr-only">Delivery </span>
+                        {trip.trip.dropoffAddress}
+                      </span>
+                    </span>
                   </span>
 
-                  <span className="flex items-center justify-between gap-3">
-                    <TripStatusBadge status={trip.trip.status} />
+                  <span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-border pt-4 min-[560px]:col-span-2 lg:contents">
+                    <span className="min-w-0">
+                      <span className="flex min-w-0 items-center gap-1.5 text-sm leading-5">
+                        <CubeIcon
+                          size={14}
+                          weight="duotone"
+                          aria-hidden="true"
+                          className="relative -top-px shrink-0 text-muted-foreground"
+                        />
+                        <span className="sr-only">Vendor</span>
+                        <span className="truncate font-medium">
+                          {trip.vendor.name}
+                        </span>
+                      </span>
+                      <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-4">
+                        <SteeringWheelIcon
+                          size={14}
+                          weight="duotone"
+                          aria-hidden="true"
+                          className="relative -top-px shrink-0 text-muted-foreground"
+                        />
+                        <span className="sr-only">Driver</span>
+                        <span className="truncate font-medium">
+                          {trip.driver?.name ?? "Unassigned"}
+                        </span>
+                      </span>
+                    </span>
+                    <TripMilestone trip={trip} />
+                  </span>
+                  <span className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-surface-strong group-hover:text-foreground sm:right-5 sm:top-5 lg:static">
                     <CaretRightIcon
                       size={16}
-                      className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                      className="transition-transform group-hover:translate-x-0.5"
                     />
                   </span>
                 </Link>
@@ -174,7 +222,7 @@ export function TripQueue({
         ) : (
           <EmptyState
             className="min-h-56"
-            icon={<CarIcon />}
+            icon={<CarIcon weight="duotone" />}
             title="No matching trips"
             description="Change the filter or create a new trip."
           />
@@ -182,6 +230,26 @@ export function TripQueue({
         </div>
       </div>
     </section>
+  );
+}
+
+function TripMilestone({ trip }: { trip: TripView }) {
+  const timestamp =
+    trip.trip.status === "created"
+      ? trip.trip.scheduledAt
+      : trip.trip.status === "in_transit"
+        ? trip.trip.startedAt
+        : trip.trip.status === "completed"
+          ? trip.trip.completedAt
+          : trip.trip.cancelledAt;
+
+  return (
+    <span className="grid w-max justify-items-end gap-1.5 lg:justify-items-start">
+      <TripStatusBadge status={trip.trip.status} />
+      <span className="text-xs text-muted-foreground">
+        {timestamp ? formatRelativeTime(timestamp) : "Time not set"}
+      </span>
+    </span>
   );
 }
 
@@ -205,7 +273,7 @@ function DriverAssignment({
     <div className="flex flex-col gap-3 border-t border-border bg-background p-3 sm:flex-row sm:items-center">
       <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-          <SteeringWheelIcon size={18} />
+          <SteeringWheelIcon size={18} weight="duotone" />
         </span>
         <span className="min-w-0">
           <span className="block text-xs font-semibold">Assign driver</span>

@@ -80,7 +80,7 @@ export function LocationPingLog({
               </div>
               <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-2 tabular-nums">
-                  <MapPinIcon size={14} className="shrink-0" />
+                  <MapPinIcon size={14} weight="duotone" className="shrink-0" />
                   {formatCoordinates(position.latitude, position.longitude)}
                 </span>
                 <span className="ml-auto flex items-center gap-3">
@@ -94,6 +94,7 @@ export function LocationPingLog({
                   <span className="flex items-center gap-1.5">
                   <BroadcastIcon
                       size={13}
+                      weight="duotone"
                       className="shrink-0"
                   />
                   {formatPositionSource(position.source)}
@@ -105,7 +106,7 @@ export function LocationPingLog({
         </ol>
       ) : (
         <EmptyState
-          icon={<BroadcastIcon />}
+          icon={<BroadcastIcon weight="duotone" />}
           title="No location pings yet"
           description="Reports will appear here when the trip starts moving."
         />

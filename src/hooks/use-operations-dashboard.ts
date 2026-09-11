@@ -250,7 +250,9 @@ export function useOperationsDashboard({
     [focused],
   );
   const streamStatus = useTripEvents(
-    focused ? selectedId : null,
+    focused && selectedTrip?.trip.status === "in_transit"
+      ? selectedId
+      : null,
     handlePosition,
   );
 

@@ -54,6 +54,97 @@ function markerElement(kind: "pickup" | "dropoff" | "vehicle") {
   return element;
 }
 
+const ROUTE_SOURCE = "trip-driving-route";
+const ROUTE_LAYER = "trip-driving-route-line";
+const ROUTE_CASING = "trip-driving-route-casing";
+
+function emptyRoute() {
+  return {
+    type: "Feature" as const,
+    properties: {},
+    geometry: { type: "LineString" as const, coordinates: [] as Array<[number, number]> },
+  };
+}
+
+function ensureRouteLayer(map: mapboxgl.Map) {
+  if (map.getSource(ROUTE_SOURCE)) return;
+
+  map.addSource(ROUTE_SOURCE, {
+    type: "geojson",
+    data: emptyRoute(),
+  });
+  map.addLayer({
+    id: ROUTE_CASING,
+    type: "line",
+    source: ROUTE_SOURCE,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#fffafa",
+      "line-width": 6,
+      "line-opacity": 0.55,
+    },
+  });
+  map.addLayer({
+    id: ROUTE_LAYER,
+    type: "line",
+    source: ROUTE_SOURCE,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color":
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--primary")
+          .trim() || "#b4232c",
+      "line-width": 3.5,
+      "line-opacity": 0.95,
+    },
+  });
+}
+
+function setRouteCoordinates(
+  map: mapboxgl.Map,
+  coordinates: Array<[number, number]>,
+) {
+  ensureRouteLayer(map);
+  const source = map.getSource(ROUTE_SOURCE);
+  if (source && "setData" in source) {
+    source.setData({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates },
+    });
+  }
+}
+
+function clearRoute(map: mapboxgl.Map) {
+  const source = map.getSource(ROUTE_SOURCE);
+  if (source && "setData" in source) {
+    source.setData(emptyRoute());
+  }
+}
+
+async function fetchDrivingRoute(
+  token: string,
+  from: [number, number],
+  to: [number, number],
+  signal: AbortSignal,
+) {
+  const url = new URL(
+    `https://api.mapbox.com/directions/v5/mapbox/driving/${from.join(",")};${to.join(",")}`,
+  );
+  url.searchParams.set("geometries", "geojson");
+  url.searchParams.set("overview", "full");
+  url.searchParams.set("access_token", token);
+
+  const response = await fetch(url, { signal });
+  if (!response.ok) return null;
+
+  const body = (await response.json()) as {
+    routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+  };
+  const coordinates = body.routes?.[0]?.geometry?.coordinates;
+  return coordinates?.length ? coordinates : null;
+}
+
 export function OperationsMap({ trip }: { trip: TripView | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -101,7 +192,12 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !trip) return;
+    if (!map || !ready) return;
+    if (!trip) {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      return;
+    }
 
     markersRef.current.forEach((marker) => marker.remove());
     const pickup: [number, number] = [
@@ -131,27 +227,78 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
           ]
         : []),
     ];
-
-    if (lastFitTripRef.current !== trip.trip.id) {
-      const bounds = new mapboxgl.LngLatBounds(pickup, pickup);
-      bounds.extend(dropoff);
-      if (current) bounds.extend(current);
-      map.fitBounds(bounds, {
-        padding: { top: 88, right: 88, bottom: 88, left: 88 },
-        maxZoom: 13,
-        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? 0
-          : 650,
-      });
-      lastFitTripRef.current = trip.trip.id;
-    }
   }, [ready, trip]);
+
+  const routeTripId = trip?.trip.id ?? null;
+  const pickupLatitude = trip?.trip.pickupLatitude ?? null;
+  const pickupLongitude = trip?.trip.pickupLongitude ?? null;
+  const dropoffLatitude = trip?.trip.dropoffLatitude ?? null;
+  const dropoffLongitude = trip?.trip.dropoffLongitude ?? null;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (
+      !token ||
+      routeTripId === null ||
+      pickupLatitude === null ||
+      pickupLongitude === null ||
+      dropoffLatitude === null ||
+      dropoffLongitude === null
+    ) {
+      clearRoute(map);
+      return;
+    }
+
+    const pickup: [number, number] = [pickupLongitude, pickupLatitude];
+    const dropoff: [number, number] = [dropoffLongitude, dropoffLatitude];
+    const controller = new AbortController();
+
+    void fetchDrivingRoute(token, pickup, dropoff, controller.signal)
+      .then((coordinates) => {
+        if (controller.signal.aborted || mapRef.current !== map) return;
+        setRouteCoordinates(map, coordinates ?? [pickup, dropoff]);
+
+        if (lastFitTripRef.current === routeTripId) return;
+        const bounds = new mapboxgl.LngLatBounds(pickup, pickup);
+        bounds.extend(dropoff);
+        for (const point of coordinates ?? []) bounds.extend(point);
+        map.fitBounds(bounds, {
+          padding: { top: 88, right: 88, bottom: 88, left: 88 },
+          maxZoom: 13,
+          duration: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? 0
+            : 650,
+        });
+        lastFitTripRef.current = routeTripId;
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setRouteCoordinates(map, [pickup, dropoff]);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    dropoffLatitude,
+    dropoffLongitude,
+    pickupLatitude,
+    pickupLongitude,
+    ready,
+    routeTripId,
+    token,
+  ]);
 
   if (!token) {
     return (
       <EmptyState
         className="h-full min-h-72 bg-surface-strong p-8"
-        icon={<MapPinLineIcon className="text-primary" />}
+        icon={<MapPinLineIcon weight="duotone" className="text-primary" />}
         title="Mapbox token required"
         description="Add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN to display live trip maps."
       />
@@ -164,7 +311,7 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
       {!trip ? (
         <EmptyState
           className="pointer-events-none absolute inset-0 bg-background/70 p-8 backdrop-blur-sm"
-          icon={<MapPinLineIcon />}
+          icon={<MapPinLineIcon weight="duotone" />}
           title="Select a trip"
           description="Pickup, drop-off, and live vehicle position will appear here."
         />

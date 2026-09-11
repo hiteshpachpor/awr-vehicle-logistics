@@ -12,6 +12,9 @@
   --border: #d9dbde;
   --primary: #b4232c;
   --primary-foreground: #fffafa;
+  --choice-selected: #fbeaec;
+  --choice-selected-hover: #f7dadd;
+  --choice-selected-foreground: #7f1820;
   --destructive: #a51d28;
   --destructive-foreground: #fffafa;
   --overlay: #181719;
@@ -37,6 +40,9 @@
     --border: #35373b;
     --primary: #d64a52;
     --primary-foreground: #fffafa;
+    --choice-selected: #401f24;
+    --choice-selected-hover: #4c2329;
+    --choice-selected-foreground: #ffb3b8;
     --destructive: #c93b46;
     --destructive-foreground: #fffafa;
     --overlay: #09090b;
@@ -61,6 +67,9 @@
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-choice-selected: var(--choice-selected);
+  --color-choice-selected-hover: var(--choice-selected-hover);
+  --color-choice-selected-foreground: var(--choice-selected-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-overlay: var(--overlay);
@@ -106,6 +115,10 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+.account-choice[aria-pressed="true"] {
+  border-color: var(--primary);
 }
 
 ::selection {

@@ -28,7 +28,7 @@ export function InlineAlert({
     >
       <Icon
         size={18}
-        weight={variant === "success" ? "fill" : "regular"}
+        weight="duotone"
         aria-hidden="true"
         className={cn(
           "mt-0.5 shrink-0",

@@ -140,7 +140,7 @@ export function OperationsDashboard({
           {session?.role === "operations" ? (
             <Button asChild>
               <Link href="/ops/trips/new">
-                <PlusIcon size={17} weight="bold" />
+                <PlusIcon size={17} />
                 <span className="hidden sm:inline">New trip</span>
                 <span className="sm:hidden">New</span>
               </Link>
@@ -165,6 +165,7 @@ export function OperationsDashboard({
           <div className="max-w-sm text-center">
             <WarningCircleIcon
               size={32}
+              weight="duotone"
               className="mx-auto mb-3 text-destructive"
             />
             <h2 className="font-semibold">Trips are unavailable</h2>
@@ -220,7 +221,7 @@ export function OperationsDashboard({
                           : "Live trip map"}
                       </h2>
                       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPinIcon size={13} />
+                        <MapPinIcon size={13} weight="duotone" />
                         {selectedTrip?.latestPosition
                           ? "Showing latest reported position"
                           : "Showing pickup and drop-off locations"}
@@ -290,12 +291,13 @@ export function OperationsDashboard({
           {notice.type === "success" ? (
             <CheckCircleIcon
               size={20}
-              weight="fill"
+              weight="duotone"
               className="mt-0.5 shrink-0 text-primary"
             />
           ) : (
             <WarningCircleIcon
               size={20}
+              weight="duotone"
               className="mt-0.5 shrink-0 text-destructive"
             />
           )}

@@ -137,7 +137,6 @@ export function SearchSelect({
               >
                 <CheckIcon
                   size={16}
-                  weight="bold"
                   aria-hidden="true"
                   className={cn(
                     "mt-0.5 shrink-0",
