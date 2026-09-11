@@ -271,6 +271,7 @@ export function OperationsDashboard({
               homeHref={homeHref}
               locationStatus={driverLocation.status}
               locationError={driverLocation.error}
+              locationPendingCount={driverLocation.pendingCount}
               onTransition={(status) => void transitionTrip(status)}
               onSimulate={(pace) => void simulateTrip(pace)}
               simulating={simulating}

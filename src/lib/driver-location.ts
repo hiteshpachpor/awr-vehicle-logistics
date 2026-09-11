@@ -34,6 +34,10 @@ export class DriverLocationAccessError extends Error {
   }
 }
 
+export function makeBrowserEventId(tripId: string, recordedAtMs: number) {
+  return `browser-${tripId}-${recordedAtMs}`;
+}
+
 export function makeDriverLocationPayload(
   position: Pick<GeolocationPosition, "coords" | "timestamp">,
   eventId: string,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DriverLocationAccessError,
+  makeBrowserEventId,
   makeDriverLocationPayload,
   requestDriverLocationAccess,
   startTripLocationError,
@@ -27,6 +28,13 @@ describe("driver location payload", () => {
       speed: 36,
       eventId: "browser-event-1",
     });
+  });
+
+  it("builds a stable browser event id from trip and GPS time", () => {
+    const recordedAt = Date.parse("2026-09-10T10:00:00Z");
+    expect(makeBrowserEventId("trip-1", recordedAt)).toBe(
+      `browser-trip-1-${recordedAt}`,
+    );
   });
 });
 

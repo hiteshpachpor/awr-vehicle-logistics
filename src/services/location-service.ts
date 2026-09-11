@@ -28,10 +28,12 @@ export class LocationService {
       sourceEventId: input.eventId,
     });
 
-    await this.publisher.publish({
-      tripId,
-      positionId: result.position.id,
-    });
+    if (result.created) {
+      await this.publisher.publish({
+        tripId,
+        positionId: result.position.id,
+      });
+    }
 
     return result;
   }

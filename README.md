@@ -192,6 +192,10 @@ POST /api/trips/:id/location
 `eventId` is optional and provides idempotency within a trip. Device time is
 stored as `recorded_at`; server receipt time is stored separately.
 
+The driver workspace queues GPS pings while offline and POSTs them later with
+the original device `timestamp` and a stable `eventId`. `received_at` remains
+the time the server accepted the POST.
+
 ### Live events
 
 ```text

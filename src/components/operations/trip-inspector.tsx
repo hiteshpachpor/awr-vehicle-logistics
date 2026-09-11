@@ -141,6 +141,7 @@ export function TripInspector({
   homeHref,
   locationStatus,
   locationError,
+  locationPendingCount = 0,
   onTransition,
   onSimulate,
   simulating = false,
@@ -159,6 +160,7 @@ export function TripInspector({
   homeHref: string;
   locationStatus: DriverLocationStatus;
   locationError: string | null;
+  locationPendingCount?: number;
   onTransition: (status: TripStatus) => void;
   onSimulate?: (pace: SimulationPace) => void;
   simulating?: boolean;
@@ -444,8 +446,7 @@ export function TripInspector({
                         : "Location sharing needs attention"}
                   </p>
                   <p className="mt-1 text-xs leading-5">
-                    {locationError ??
-                      "Keep this page open while the trip is in progress."}
+                    {locationSharingDetail(locationError, locationPendingCount)}
                   </p>
                 </>
               )}
@@ -633,6 +634,15 @@ function DetailItem({
       </div>
     </div>
   );
+}
+
+function locationSharingDetail(error: string | null, pendingCount: number) {
+  if (error) return error;
+  if (pendingCount === 1) return "1 location ping waiting to send";
+  if (pendingCount > 0) {
+    return `${pendingCount} location pings waiting to send`;
+  }
+  return "Keep this page open while the trip is in progress.";
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

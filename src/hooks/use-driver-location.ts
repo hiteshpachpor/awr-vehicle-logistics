@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { makeDriverLocationPayload } from "@/lib/driver-location";
+import { createDriverLocationOutbox } from "@/lib/driver-location-outbox";
 import type { TripView } from "@/lib/operations-types";
 
-const LOCATION_SEND_INTERVAL_MS = 5_000;
+const LOCATION_SAMPLE_INTERVAL_MS = 5_000;
+const SEND_BACKOFF_MS = [1_000, 2_000, 5_000, 15_000, 30_000] as const;
 
 export type DriverLocationStatus =
   | "idle"
@@ -18,6 +19,7 @@ export function useDriverLocation(
 ) {
   const [status, setStatus] = useState<DriverLocationStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const tripId = trip?.trip.id;
   const inTransit = trip?.trip.status === "in_transit";
 
@@ -25,92 +27,131 @@ export function useDriverLocation(
     if (!enabled || !tripId || !inTransit) {
       return;
     }
-    if (!("geolocation" in navigator)) {
-      const unsupportedTimer = window.setTimeout(() => {
-        setStatus("unavailable");
-        setError("This browser does not support location sharing.");
-      }, 0);
-      return () => window.clearTimeout(unsupportedTimer);
-    }
 
+    const activeTripId = tripId;
+    const outbox = createDriverLocationOutbox();
+    const hasGeolocation = "geolocation" in navigator;
     let active = true;
+    let latestFix: GeolocationPosition | null = null;
     let requestInFlight = false;
-    let lastSentAt = 0;
-    let queuedPosition: GeolocationPosition | null = null;
-    let sendTimer: number | null = null;
+    let sampleTimer: number | null = null;
+    let backoffTimer: number | null = null;
+    let backoffIndex = 0;
+    let settled = false;
+
     const requestingTimer = window.setTimeout(() => {
-      setStatus("requesting");
-      setError(null);
+      setPendingCount(outbox.size(activeTripId));
+      if (!active || settled) return;
+      setStatus(hasGeolocation ? "requesting" : "unavailable");
+      setError(
+        hasGeolocation
+          ? null
+          : "This browser does not support location sharing.",
+      );
     }, 0);
 
-    function sendPosition(position: GeolocationPosition) {
-      if (!active) return;
-      requestInFlight = true;
-      lastSentAt = Date.now();
+    function syncPending() {
+      if (active) setPendingCount(outbox.size(activeTripId));
+    }
 
-      void fetch(`/api/trips/${tripId}/location`, {
+    function sampleLatestFix() {
+      if (!active || !latestFix) return;
+      outbox.enqueue(activeTripId, latestFix);
+      syncPending();
+      flush();
+    }
+
+    function scheduleBackoff() {
+      requestInFlight = false;
+      if (!active || backoffTimer !== null) return;
+      const wait =
+        SEND_BACKOFF_MS[Math.min(backoffIndex, SEND_BACKOFF_MS.length - 1)];
+      backoffIndex += 1;
+      backoffTimer = window.setTimeout(() => {
+        backoffTimer = null;
+        flush();
+      }, wait);
+    }
+
+    function flushNow() {
+      if (backoffTimer !== null) {
+        window.clearTimeout(backoffTimer);
+        backoffTimer = null;
+      }
+      backoffIndex = 0;
+      flush();
+    }
+
+    function flush() {
+      if (!active || requestInFlight) return;
+      const item = outbox.peek(activeTripId);
+      if (!item) return;
+
+      requestInFlight = true;
+      void fetch(`/api/trips/${activeTripId}/location`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          makeDriverLocationPayload(
-            position,
-            `browser-${crypto.randomUUID()}`,
-          ),
-        ),
+        body: JSON.stringify(item),
       })
-        .then(async (response) => {
-          if (!response.ok && active) {
-            setStatus("unavailable");
-            setError("Your location could not be sent. We will keep trying.");
+        .then((response) => {
+          if (!active) return;
+          if (response.ok) {
+            outbox.ack(activeTripId, item.eventId);
+            backoffIndex = 0;
+            settled = true;
+            setStatus("sharing");
+            setError(null);
+            syncPending();
+            requestInFlight = false;
+            flush();
+            return;
           }
+          settled = true;
+          setStatus("unavailable");
+          setError("Your location could not be sent. We will keep trying.");
+          scheduleBackoff();
         })
         .catch(() => {
           if (!active) return;
+          settled = true;
           setStatus("unavailable");
           setError("Your location could not be sent. We will keep trying.");
-        })
-        .finally(() => {
-          requestInFlight = false;
-          if (!active || !queuedPosition) return;
-          const nextPosition = queuedPosition;
-          queuedPosition = null;
-          schedulePosition(nextPosition);
+          scheduleBackoff();
         });
     }
 
-    function schedulePosition(position: GeolocationPosition) {
-      if (!active) return;
-      setStatus("sharing");
-      setError(null);
-      queuedPosition = position;
+    function handleOnline() {
+      flushNow();
+    }
 
-      if (requestInFlight) return;
+    window.addEventListener("online", handleOnline);
+    flush();
 
-      const waitTime = Math.max(
-        0,
-        LOCATION_SEND_INTERVAL_MS - (Date.now() - lastSentAt),
-      );
-      if (waitTime === 0) {
-        queuedPosition = null;
-        sendPosition(position);
-        return;
-      }
-      if (sendTimer !== null) return;
-
-      sendTimer = window.setTimeout(() => {
-        sendTimer = null;
-        const nextPosition = queuedPosition;
-        queuedPosition = null;
-        if (nextPosition) sendPosition(nextPosition);
-      }, waitTime);
+    if (!hasGeolocation) {
+      return () => {
+        active = false;
+        window.clearTimeout(requestingTimer);
+        window.removeEventListener("online", handleOnline);
+        if (backoffTimer !== null) window.clearTimeout(backoffTimer);
+        sendKeepalive(activeTripId, outbox);
+      };
     }
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
-        schedulePosition(position);
+        if (!active) return;
+        latestFix = position;
+        if (sampleTimer === null) {
+          sampleLatestFix();
+          sampleTimer = window.setInterval(
+            sampleLatestFix,
+            LOCATION_SAMPLE_INTERVAL_MS,
+          );
+        }
       },
       (reason) => {
         if (!active) return;
+        settled = true;
         setStatus("unavailable");
         setError(
           reason.code === reason.PERMISSION_DENIED
@@ -128,12 +169,29 @@ export function useDriverLocation(
     return () => {
       active = false;
       window.clearTimeout(requestingTimer);
-      if (sendTimer !== null) window.clearTimeout(sendTimer);
+      if (sampleTimer !== null) window.clearInterval(sampleTimer);
+      if (backoffTimer !== null) window.clearTimeout(backoffTimer);
+      window.removeEventListener("online", handleOnline);
       navigator.geolocation.clearWatch(watchId);
+      sendKeepalive(activeTripId, outbox);
     };
   }, [enabled, inTransit, tripId]);
 
   return enabled && inTransit
-    ? { status, error }
-    : { status: "idle" as const, error: null };
+    ? { status, error, pendingCount }
+    : { status: "idle" as const, error: null, pendingCount: 0 };
+}
+
+function sendKeepalive(
+  tripId: string,
+  outbox: ReturnType<typeof createDriverLocationOutbox>,
+) {
+  const item = outbox.peek(tripId);
+  if (!item) return;
+  void fetch(`/api/trips/${tripId}/location`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(item),
+    keepalive: true,
+  });
 }
