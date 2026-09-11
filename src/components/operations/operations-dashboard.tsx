@@ -63,10 +63,12 @@ export function OperationsDashboard({
     positionsError,
     driverLocation,
     streamStatus,
+    simulating,
     counts,
     visibleTrips,
     loadTrips,
     transitionTrip,
+    simulateTrip,
     assignDriver,
   } = useOperationsDashboard({
     initialTripId,
@@ -269,6 +271,8 @@ export function OperationsDashboard({
               locationStatus={driverLocation.status}
               locationError={driverLocation.error}
               onTransition={(status) => void transitionTrip(status)}
+              onSimulate={() => void simulateTrip()}
+              simulating={simulating}
               focused
               drivers={session?.role === "controller" ? drivers : undefined}
               assigningTripId={assigningTripId}

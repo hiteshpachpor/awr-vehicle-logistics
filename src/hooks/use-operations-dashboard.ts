@@ -59,6 +59,7 @@ export function useOperationsDashboard({
   const [positionLog, setPositionLog] = useState<Position[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(focused);
   const [positionsError, setPositionsError] = useState<string | null>(null);
+  const [simulating, setSimulating] = useState(false);
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
@@ -122,6 +123,26 @@ export function useOperationsDashboard({
         }
         return null;
       });
+      if (focused && loadedTrips[0]) {
+        try {
+          const simulationResponse = await fetch(
+            `/api/trips/${loadedTrips[0].trip.id}/simulation`,
+            { cache: "no-store" },
+          );
+          const simulationBody = (await simulationResponse.json()) as
+            | { data: { status: "running" | "idle" } }
+            | ApiErrorBody;
+          setSimulating(
+            simulationResponse.ok &&
+              "data" in simulationBody &&
+              simulationBody.data.status === "running",
+          );
+        } catch {
+          setSimulating(false);
+        }
+      } else {
+        setSimulating(false);
+      }
       setLastRefresh(new Date());
     } catch (error) {
       setLoadError(
@@ -225,9 +246,11 @@ export function useOperationsDashboard({
 
   const selectedTrip =
     trips.find((trip) => trip.trip.id === selectedId) ?? null;
+  const simulationActive =
+    simulating || selectedTrip?.latestPosition?.source === "simulator";
   const driverLocation = useDriverLocation(
     selectedTrip,
-    focused && session?.role === "driver",
+    focused && session?.role === "driver" && !simulationActive,
   );
 
   const handlePosition = useCallback(
@@ -284,11 +307,45 @@ export function useOperationsDashboard({
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
       replaceTrip(body as TripView);
+      if (status !== "in_transit") {
+        setSimulating(false);
+      }
     } catch (error) {
       setMutationError(
         error instanceof Error
           ? error.message
           : "The trip could not be updated.",
+      );
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function simulateTrip() {
+    if (!selectedId) return;
+    setMutating(true);
+    setMutationError(null);
+    try {
+      const response = await fetch(`/api/trips/${selectedId}/simulation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await response.json()) as
+        | { data: { status: string }; trip: TripView }
+        | ApiErrorBody;
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(body as ApiErrorBody));
+      }
+      setSimulating(true);
+      if ("trip" in body) {
+        replaceTrip(body.trip);
+      }
+    } catch (error) {
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "The trip could not be simulated.",
       );
     } finally {
       setMutating(false);
@@ -370,10 +427,12 @@ export function useOperationsDashboard({
     positionsError,
     driverLocation,
     streamStatus,
+    simulating: simulationActive,
     counts,
     visibleTrips,
     loadTrips,
     transitionTrip,
+    simulateTrip,
     assignDriver,
   };
 }

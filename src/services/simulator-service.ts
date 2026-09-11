@@ -1,44 +1,49 @@
 import { randomUUID } from "node:crypto";
 import { ConflictError } from "@/domain/errors";
+import { fetchDrivingRoute } from "@/lib/mapbox-route";
+import {
+  sampleRoute,
+  type LatLng,
+} from "@/lib/route-geometry";
 import type { LocationService } from "./location-service";
-import type { TripService, TripView } from "./trip-service";
+import type { TripService } from "./trip-service";
 
-const SIMULATION_POINT_COUNT = 12;
+export const SIMULATION_INTERVAL_MS = 5_000;
+export const SIMULATION_STEP_METERS = 1_000;
+export const SIMULATION_SPEED_KMH = 720;
 
-export function buildSimulationRoute(
-  trip: TripView,
-  pointCount = SIMULATION_POINT_COUNT,
-) {
-  const totalPoints = Math.max(2, pointCount);
-  const start = trip.latestPosition
-    ? {
-        lat: trip.latestPosition.latitude,
-        lng: trip.latestPosition.longitude,
-      }
-    : {
-        lat: trip.trip.pickupLatitude,
-        lng: trip.trip.pickupLongitude,
-      };
-  const destination = {
-    lat: trip.trip.dropoffLatitude,
-    lng: trip.trip.dropoffLongitude,
-  };
-
-  return Array.from({ length: totalPoints }, (_, index) => {
-    const progress = index / (totalPoints - 1);
-    return {
-      lat: start.lat + (destination.lat - start.lat) * progress,
-      lng: start.lng + (destination.lng - start.lng) * progress,
-    };
-  });
-}
+export type FetchSimulationRoute = (
+  from: LatLng,
+  to: LatLng,
+) => Promise<LatLng[] | null>;
 
 type Simulation = {
   timer: ReturnType<typeof setInterval>;
   sessionId: string;
   nextPoint: number;
-  route: Array<{ lat: number; lng: number }>;
+  route: LatLng[];
 };
+
+export async function fetchMapboxSimulationRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<LatLng[] | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+  if (!token) {
+    return null;
+  }
+
+  const coordinates = await fetchDrivingRoute(
+    token,
+    [from.lng, from.lat],
+    [to.lng, to.lat],
+  );
+  if (!coordinates?.length) {
+    return null;
+  }
+
+  return coordinates.map(([lng, lat]) => ({ lat, lng }));
+}
 
 export class SimulatorService {
   private readonly simulations = new Map<string, Simulation>();
@@ -48,9 +53,10 @@ export class SimulatorService {
     private readonly locations: LocationService,
     private readonly now: () => Date = () => new Date(),
     private readonly makeId: () => string = randomUUID,
+    private readonly fetchRoute: FetchSimulationRoute = fetchMapboxSimulationRoute,
   ) {}
 
-  async start(tripId: string, intervalMs: number) {
+  async start(tripId: string) {
     if (this.simulations.has(tripId)) {
       throw new ConflictError(
         "A simulation is already running for this trip",
@@ -59,23 +65,36 @@ export class SimulatorService {
     }
 
     const trip = await this.trips.get(tripId);
-    if (trip.trip.status === "created") {
-      await this.trips.transition(tripId, "in_transit");
-    } else if (trip.trip.status !== "in_transit") {
+    if (trip.trip.status !== "created" && trip.trip.status !== "in_transit") {
       throw new ConflictError(
         "Only created or in-transit trips can be simulated",
         "TRIP_NOT_SIMULATABLE",
       );
     }
 
+    const pickup = {
+      lat: trip.trip.pickupLatitude,
+      lng: trip.trip.pickupLongitude,
+    };
+    const dropoff = {
+      lat: trip.trip.dropoffLatitude,
+      lng: trip.trip.dropoffLongitude,
+    };
+    const path = await this.resolvePath(pickup, dropoff);
+    const route = sampleRoute(path, SIMULATION_STEP_METERS);
+
+    if (trip.trip.status === "created") {
+      await this.trips.transition(tripId, "in_transit");
+    }
+
     const sessionId = this.makeId();
     const simulation: Simulation = {
       sessionId,
       nextPoint: 0,
-      route: buildSimulationRoute(trip),
+      route,
       timer: setInterval(() => {
         void this.tick(tripId).catch(() => this.stop(tripId));
-      }, intervalMs),
+      }, SIMULATION_INTERVAL_MS),
     };
     this.simulations.set(tripId, simulation);
     try {
@@ -85,7 +104,12 @@ export class SimulatorService {
       throw error;
     }
 
-    return { tripId, sessionId, intervalMs, status: "running" as const };
+    return {
+      tripId,
+      sessionId,
+      intervalMs: SIMULATION_INTERVAL_MS,
+      status: "running" as const,
+    };
   }
 
   stop(tripId: string) {
@@ -102,6 +126,19 @@ export class SimulatorService {
     return this.simulations.has(tripId);
   }
 
+  private async resolvePath(pickup: LatLng, dropoff: LatLng) {
+    try {
+      const routed = await this.fetchRoute(pickup, dropoff);
+      if (routed?.length) {
+        return routed;
+      }
+    } catch {
+      // Fall back to a geodesic line when Mapbox is unavailable.
+    }
+
+    return [pickup, dropoff];
+  }
+
   private async tick(tripId: string) {
     const simulation = this.simulations.get(tripId);
     if (!simulation) {
@@ -110,7 +147,6 @@ export class SimulatorService {
     const point = simulation.route[simulation.nextPoint];
     if (!point) {
       this.stop(tripId);
-      await this.trips.transition(tripId, "completed");
       return;
     }
 
@@ -120,11 +156,14 @@ export class SimulatorService {
         lat: point.lat,
         lng: point.lng,
         timestamp: this.now().toISOString(),
-        speed: 12,
+        speed: SIMULATION_SPEED_KMH,
         eventId: `${simulation.sessionId}-${simulation.nextPoint}`,
       },
       "simulator",
     );
     simulation.nextPoint += 1;
+    if (simulation.nextPoint >= simulation.route.length) {
+      this.stop(tripId);
+    }
   }
 }

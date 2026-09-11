@@ -27,7 +27,7 @@ describe("API contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  it("applies the default simulator interval", () => {
-    expect(simulationRequestSchema.parse({}).intervalMs).toBe(1_000);
+  it("accepts an empty simulator request body", () => {
+    expect(simulationRequestSchema.parse({})).toEqual({});
   });
 });

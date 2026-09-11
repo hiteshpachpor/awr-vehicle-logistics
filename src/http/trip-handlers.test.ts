@@ -4,6 +4,7 @@ import { InvalidStateTransitionError } from "@/domain/errors";
 import type { AppContainer } from "@/lib/container";
 import {
   createTripHandler,
+  getSimulationHandler,
   ingestLocationHandler,
   listTripsHandler,
   listTripPositionsHandler,
@@ -25,7 +26,7 @@ function container(overrides: Partial<AppContainer> = {}) {
     },
     positionRepository: { listRecent: vi.fn() },
     locationService: { ingest: vi.fn() },
-    simulatorService: { start: vi.fn(), stop: vi.fn() },
+    simulatorService: { start: vi.fn(), stop: vi.fn(), isRunning: vi.fn() },
     ...overrides,
   } as unknown as AppContainer;
 }
@@ -234,15 +235,18 @@ describe("trip HTTP handlers", () => {
     vi.mocked(app.simulatorService.start).mockResolvedValue({
       tripId,
       sessionId: "session",
-      intervalMs: 500,
+      intervalMs: 5_000,
       status: "running",
     });
+    vi.mocked(app.tripService.get).mockResolvedValue({
+      trip: { id: tripId },
+    } as never);
     vi.mocked(app.simulatorService.stop).mockReturnValue(true);
     const request = new Request(
       `http://localhost/api/trips/${tripId}/simulation`,
       {
         method: "POST",
-        body: JSON.stringify({ intervalMs: 500 }),
+        body: JSON.stringify({}),
       },
     );
 
@@ -251,6 +255,22 @@ describe("trip HTTP handlers", () => {
 
     expect(started.status).toBe(201);
     expect(stopped.status).toBe(204);
-    expect(app.simulatorService.start).toHaveBeenCalledWith(tripId, 500);
+    expect(app.simulatorService.start).toHaveBeenCalledWith(tripId);
+    expect(app.tripService.get).toHaveBeenCalledWith(tripId);
+  });
+
+  it("reports whether a simulation is running", async () => {
+    const app = container();
+    vi.mocked(app.tripService.get).mockResolvedValue({
+      trip: { id: tripId },
+    } as never);
+    vi.mocked(app.simulatorService.isRunning).mockReturnValue(true);
+
+    const response = await getSimulationHandler(tripId, app);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: { status: "running" },
+    });
   });
 });

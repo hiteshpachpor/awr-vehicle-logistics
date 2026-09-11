@@ -9,6 +9,7 @@ import {
   CarIcon,
   CheckCircleIcon,
   MapPinIcon,
+  PathIcon,
   PlayIcon,
   UserIcon,
   XCircleIcon,
@@ -124,6 +125,8 @@ export function TripInspector({
   locationStatus,
   locationError,
   onTransition,
+  onSimulate,
+  simulating = false,
   focused,
   drivers,
   assigningTripId,
@@ -139,6 +142,8 @@ export function TripInspector({
   locationStatus: DriverLocationStatus;
   locationError: string | null;
   onTransition: (status: TripStatus) => void;
+  onSimulate?: () => void;
+  simulating?: boolean;
   focused?: boolean;
   drivers?: DriverOption[];
   assigningTripId?: string | null;
@@ -205,14 +210,58 @@ export function TripInspector({
                   Start trip
                 </Button>
               ) : null}
+              {actions.includes("simulate") && onSimulate ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="secondary" disabled={mutating}>
+                      <PathIcon />
+                      Simulate trip
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Simulate this trip?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This starts the trip and moves a simulated vehicle along
+                        the mapped route at 1 km every 5 seconds. Real location
+                        sharing will not be used.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep trip scheduled</AlertDialogCancel>
+                      <AlertDialogAction onClick={onSimulate}>
+                        Simulate trip
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : null}
               {actions.includes("complete") ? (
-                <Button
-                  disabled={mutating}
-                  onClick={() => onTransition("completed")}
-                >
-                  <CheckCircleIcon />
-                  End trip
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={mutating}>
+                      <CheckCircleIcon />
+                      End trip
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>End this trip?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This marks the trip as completed and stops location
+                        updates.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep trip in transit</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => onTransition("completed")}
+                      >
+                        End trip
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               ) : null}
               {actions.includes("cancel") ? (
                 <AlertDialog>
@@ -364,22 +413,34 @@ export function TripInspector({
           <DetailGroup title="Location sharing">
             <div
               className={
-                locationError
-                  ? "rounded-[10px] bg-destructive/8 p-3 text-sm text-destructive"
-                  : "rounded-[10px] bg-primary/8 p-3 text-sm text-foreground"
+                simulating || !locationError
+                  ? "rounded-[10px] bg-primary/8 p-3 text-sm text-foreground"
+                  : "rounded-[10px] bg-destructive/8 p-3 text-sm text-destructive"
               }
             >
-              <p className="font-semibold">
-                {locationStatus === "sharing"
-                  ? "Sharing live location"
-                  : locationStatus === "requesting"
-                    ? "Requesting location access"
-                    : "Location sharing needs attention"}
-              </p>
-              <p className="mt-1 text-xs leading-5">
-                {locationError ??
-                  "Keep this page open while the trip is in progress."}
-              </p>
+              {simulating ? (
+                <>
+                  <p className="font-semibold">Simulating live location</p>
+                  <p className="mt-1 text-xs leading-5">
+                    A simulated vehicle is moving along the mapped route at 1 km
+                    every 5 seconds.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold">
+                    {locationStatus === "sharing"
+                      ? "Sharing live location"
+                      : locationStatus === "requesting"
+                        ? "Requesting location access"
+                        : "Location sharing needs attention"}
+                  </p>
+                  <p className="mt-1 text-xs leading-5">
+                    {locationError ??
+                      "Keep this page open while the trip is in progress."}
+                  </p>
+                </>
+              )}
             </div>
           </DetailGroup>
         ) : null}

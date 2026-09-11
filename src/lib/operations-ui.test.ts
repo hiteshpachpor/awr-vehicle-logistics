@@ -8,6 +8,7 @@ import {
   formatSpeed,
   formatTripRoute,
   getApiErrorMessage,
+  hasActualDropoffMismatch,
   matchesTrip,
 } from "./operations-ui";
 import type { TripView } from "./operations-types";
@@ -30,7 +31,11 @@ const trip = {
 
 describe("operations UI helpers", () => {
   it("returns only valid lifecycle actions", () => {
-    expect(availableTripActions("created")).toEqual(["start", "cancel"]);
+    expect(availableTripActions("created")).toEqual([
+      "start",
+      "simulate",
+      "cancel",
+    ]);
     expect(availableTripActions("in_transit")).toEqual([
       "complete",
       "cancel",
@@ -44,7 +49,10 @@ describe("operations UI helpers", () => {
     ).toEqual([]);
     expect(
       availableTripActionsForRole("created", "driver", true),
-    ).toEqual(["start"]);
+    ).toEqual(["start", "simulate"]);
+    expect(
+      availableTripActionsForRole("created", "driver", false),
+    ).toEqual([]);
     expect(
       availableTripActionsForRole("in_transit", "driver", true),
     ).toEqual(["complete"]);
@@ -80,5 +88,30 @@ describe("operations UI helpers", () => {
     expect(formatPositionSource("simulator")).toBe("Simulation");
     expect(formatPositionSource("vendor")).toBe("Vendor");
     expect(formatTripRoute(trip)).toBe("Dubai to Sharjah");
+  });
+
+  it("labels an actual drop-off only when a completed trip ended elsewhere", () => {
+    const completed = {
+      trip: {
+        status: "completed",
+        dropoffLatitude: 25.305,
+        dropoffLongitude: 55.378,
+      },
+      latestPosition: { latitude: 25.2931, longitude: 55.3607 },
+    } as TripView;
+
+    expect(hasActualDropoffMismatch(completed)).toBe(true);
+    expect(
+      hasActualDropoffMismatch({
+        ...completed,
+        trip: { ...completed.trip, status: "in_transit" },
+      } as TripView),
+    ).toBe(false);
+    expect(
+      hasActualDropoffMismatch({
+        ...completed,
+        latestPosition: { latitude: 25.305, longitude: 55.378 },
+      } as TripView),
+    ).toBe(false);
   });
 });

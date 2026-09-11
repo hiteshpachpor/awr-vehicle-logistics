@@ -112,12 +112,35 @@ export async function startSimulationHandler(
 ) {
   try {
     const tripId = idSchema.parse(id);
-    const input = simulationRequestSchema.parse(await request.json());
-    const simulation = await container.simulatorService.start(
-      tripId,
-      input.intervalMs,
+    const text = await request.text();
+    if (text.trim()) {
+      simulationRequestSchema.parse(JSON.parse(text));
+    }
+    const simulation = await container.simulatorService.start(tripId);
+    const trip = await container.tripService.get(tripId);
+    return NextResponse.json(
+      { data: simulation, trip },
+      { status: 201 },
     );
-    return NextResponse.json({ data: simulation }, { status: 201 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function getSimulationHandler(
+  id: string,
+  container: AppContainer,
+) {
+  try {
+    const tripId = idSchema.parse(id);
+    await container.tripService.get(tripId);
+    return NextResponse.json({
+      data: {
+        status: container.simulatorService.isRunning(tripId)
+          ? "running"
+          : "idle",
+      },
+    });
   } catch (error) {
     return errorResponse(error);
   }

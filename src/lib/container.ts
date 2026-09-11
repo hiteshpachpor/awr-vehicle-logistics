@@ -14,6 +14,7 @@ import { TripService } from "@/services/trip-service";
 
 const globalForEvents = globalThis as unknown as {
   positionEvents?: PostgresPositionEventSource;
+  simulatorService?: SimulatorService;
 };
 
 function getPositionEvents() {
@@ -23,6 +24,19 @@ function getPositionEvents() {
     );
   }
   return globalForEvents.positionEvents;
+}
+
+function getSimulatorService(
+  tripService: TripService,
+  locationService: LocationService,
+) {
+  if (!globalForEvents.simulatorService) {
+    globalForEvents.simulatorService = new SimulatorService(
+      tripService,
+      locationService,
+    );
+  }
+  return globalForEvents.simulatorService;
 }
 
 export function getContainer() {
@@ -38,7 +52,6 @@ export function getContainer() {
     positionRepository,
     positionPublisher,
   );
-  const simulatorService = new SimulatorService(tripService, locationService);
 
   return {
     tripService,
@@ -46,7 +59,7 @@ export function getContainer() {
     locationService,
     positionRepository,
     positionEvents: getPositionEvents(),
-    simulatorService,
+    simulatorService: getSimulatorService(tripService, locationService),
   };
 }
 

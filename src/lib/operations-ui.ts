@@ -1,4 +1,5 @@
 import type { ApiErrorBody, TripStatus, TripView } from "./operations-types";
+import { isSameLocation } from "./route-geometry";
 
 export const tripStatusLabels: Record<TripStatus, string> = {
   created: "Scheduled",
@@ -7,14 +8,14 @@ export const tripStatusLabels: Record<TripStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export type TripAction = "start" | "complete" | "cancel";
+export type TripAction = "start" | "simulate" | "complete" | "cancel";
 export type WorkspaceRole = "operations" | "controller" | "driver";
 
 export function availableTripActions(
   status: TripStatus,
 ): readonly TripAction[] {
   if (status === "created") {
-    return ["start", "cancel"] as const;
+    return ["start", "simulate", "cancel"] as const;
   }
   if (status === "in_transit") {
     return ["complete", "cancel"] as const;
@@ -29,7 +30,10 @@ export function availableTripActionsForRole(
 ) {
   return availableTripActions(status).filter((action) => {
     if (role === "driver") {
-      return action !== "cancel" && (action !== "start" || hasDriver);
+      return (
+        action !== "cancel" &&
+        ((action !== "start" && action !== "simulate") || hasDriver)
+      );
     }
     return role === "operations" && action === "cancel";
   });
@@ -103,4 +107,21 @@ export function formatPositionSource(source: "vendor" | "simulator") {
 
 export function formatTripRoute(trip: TripView) {
   return `${trip.trip.pickupAddress} to ${trip.trip.dropoffAddress}`;
+}
+
+export function hasActualDropoffMismatch(trip: TripView) {
+  if (trip.trip.status !== "completed" || !trip.latestPosition) {
+    return false;
+  }
+
+  return !isSameLocation(
+    {
+      lat: trip.latestPosition.latitude,
+      lng: trip.latestPosition.longitude,
+    },
+    {
+      lat: trip.trip.dropoffLatitude,
+      lng: trip.trip.dropoffLongitude,
+    },
+  );
 }

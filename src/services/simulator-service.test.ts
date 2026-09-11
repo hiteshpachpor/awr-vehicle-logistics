@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LocationService } from "./location-service";
 import type { TripService, TripView } from "./trip-service";
 import {
-  buildSimulationRoute,
+  SIMULATION_INTERVAL_MS,
+  SIMULATION_SPEED_KMH,
   SimulatorService,
 } from "./simulator-service";
 
@@ -18,34 +19,17 @@ const createdTrip = {
   latestPosition: null,
 } as TripView;
 
+const shortRoute = [
+  { lat: 25, lng: 55 },
+  { lat: 25.002, lng: 55 },
+];
+
 describe("SimulatorService", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("builds a route from the latest position to the trip destination", () => {
-    const inTransitTrip = {
-      ...createdTrip,
-      trip: { ...createdTrip.trip, status: "in_transit" },
-      latestPosition: { latitude: 25.25, longitude: 55.35 },
-    } as TripView;
-
-    const route = buildSimulationRoute(inTransitTrip, 3);
-
-    expect(route[0]).toEqual({ lat: 25.25, lng: 55.35 });
-    expect(route[1]?.lat).toBeCloseTo(
-      (25.25 + createdTrip.trip.dropoffLatitude) / 2,
-    );
-    expect(route[1]?.lng).toBeCloseTo(
-      (55.35 + createdTrip.trip.dropoffLongitude) / 2,
-    );
-    expect(route[2]).toEqual({
-      lat: createdTrip.trip.dropoffLatitude,
-      lng: createdTrip.trip.dropoffLongitude,
-    });
-  });
-
-  it("starts the trip and sends positions through location ingestion", async () => {
+  it("starts the trip and pings the mapped route every 5 seconds", async () => {
     vi.useFakeTimers();
     const trips = {
       get: vi.fn().mockResolvedValue(createdTrip),
@@ -54,31 +38,56 @@ describe("SimulatorService", () => {
     const locations = {
       ingest: vi.fn().mockResolvedValue({}),
     } as unknown as LocationService;
+    const fetchRoute = vi.fn().mockResolvedValue(shortRoute);
     const simulator = new SimulatorService(
       trips,
       locations,
       () => new Date("2026-09-10T10:00:00Z"),
       () => "session",
+      fetchRoute,
     );
 
-    const result = await simulator.start("trip", 1_000);
+    const result = await simulator.start("trip");
 
-    const route = buildSimulationRoute(createdTrip);
+    expect(fetchRoute).toHaveBeenCalledWith(
+      { lat: 25.1774, lng: 55.2407 },
+      { lat: 25.3188, lng: 55.4581 },
+    );
     expect(trips.transition).toHaveBeenCalledWith("trip", "in_transit");
     expect(locations.ingest).toHaveBeenCalledWith(
       "trip",
       expect.objectContaining({
-        lat: route[0]?.lat,
-        lng: route[0]?.lng,
+        lat: shortRoute[0]?.lat,
+        lng: shortRoute[0]?.lng,
+        speed: SIMULATION_SPEED_KMH,
         eventId: "session-0",
       }),
       "simulator",
     );
-    expect(result.status).toBe("running");
-    expect(simulator.stop("trip")).toBe(true);
+    expect(result).toEqual({
+      tripId: "trip",
+      sessionId: "session",
+      intervalMs: SIMULATION_INTERVAL_MS,
+      status: "running",
+    });
+
+    await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
+
+    expect(locations.ingest).toHaveBeenCalledTimes(2);
+    expect(locations.ingest).toHaveBeenLastCalledWith(
+      "trip",
+      expect.objectContaining({
+        lat: shortRoute[1]?.lat,
+        lng: shortRoute[1]?.lng,
+      }),
+      "simulator",
+    );
+    expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(false);
+    expect(simulator.stop("trip")).toBe(false);
   });
 
-  it("finishes a trip after the route is exhausted", async () => {
+  it("falls back to a geodesic line when Mapbox is unavailable", async () => {
     vi.useFakeTimers();
     const trips = {
       get: vi.fn().mockResolvedValue(createdTrip),
@@ -92,22 +101,51 @@ describe("SimulatorService", () => {
       locations,
       () => new Date("2026-09-10T10:00:00Z"),
       () => "session",
+      async () => {
+        throw new Error("Mapbox unavailable");
+      },
     );
 
-    await simulator.start("trip", 1_000);
-    const route = buildSimulationRoute(createdTrip);
-    await vi.advanceTimersByTimeAsync(route.length * 1_000);
+    await simulator.start("trip");
 
-    expect(locations.ingest).toHaveBeenCalledTimes(route.length);
-    expect(locations.ingest).toHaveBeenLastCalledWith(
+    expect(locations.ingest).toHaveBeenCalledWith(
       "trip",
       expect.objectContaining({
-        lat: createdTrip.trip.dropoffLatitude,
-        lng: createdTrip.trip.dropoffLongitude,
+        lat: createdTrip.trip.pickupLatitude,
+        lng: createdTrip.trip.pickupLongitude,
       }),
       "simulator",
     );
-    expect(trips.transition).toHaveBeenLastCalledWith("trip", "completed");
-    expect(simulator.isRunning("trip")).toBe(false);
+    expect(simulator.stop("trip")).toBe(true);
+  });
+
+  it("uses a geodesic fallback when Mapbox returns no geometry", async () => {
+    vi.useFakeTimers();
+    const trips = {
+      get: vi.fn().mockResolvedValue(createdTrip),
+      transition: vi.fn().mockResolvedValue(createdTrip),
+    } as unknown as TripService;
+    const locations = {
+      ingest: vi.fn().mockResolvedValue({}),
+    } as unknown as LocationService;
+    const simulator = new SimulatorService(
+      trips,
+      locations,
+      () => new Date("2026-09-10T10:00:00Z"),
+      () => "session",
+      async () => null,
+    );
+
+    await simulator.start("trip");
+
+    expect(locations.ingest).toHaveBeenCalledWith(
+      "trip",
+      expect.objectContaining({
+        lat: createdTrip.trip.pickupLatitude,
+        lng: createdTrip.trip.pickupLongitude,
+      }),
+      "simulator",
+    );
+    expect(simulator.stop("trip")).toBe(true);
   });
 });

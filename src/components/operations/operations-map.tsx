@@ -5,6 +5,8 @@ import { MapPinLineIcon } from "@phosphor-icons/react";
 import mapboxgl from "mapbox-gl";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { fetchDrivingRoute } from "@/lib/mapbox-route";
+import { hasActualDropoffMismatch } from "@/lib/operations-ui";
 import type { TripView } from "@/lib/operations-types";
 
 const markerIconPaths = {
@@ -16,15 +18,19 @@ const markerIconPaths = {
     "M240,104H229.2L201.42,41.5A16,16,0,0,0,186.8,32H69.2a16,16,0,0,0-14.62,9.5L26.8,104H16a8,8,0,0,0,0,16h8v80a16,16,0,0,0,16,16H64a16,16,0,0,0,16-16v-8h96v8a16,16,0,0,0,16,16h24a16,16,0,0,0,16-16V120h8a8,8,0,0,0,0-16ZM80,152H56a8,8,0,0,1,0-16H80a8,8,0,0,1,0,16Zm120,0H176a8,8,0,0,1,0-16h24a8,8,0,0,1,0,16ZM44.31,104,69.2,48H186.8l24.89,56Z",
 } as const;
 
-function markerElement(kind: "pickup" | "dropoff" | "vehicle") {
+function markerElement(
+  kind: "pickup" | "dropoff" | "vehicle",
+  labelText?: string,
+) {
   const element = document.createElement("div");
+  const resolvedLabel =
+    labelText ??
+    (kind === "pickup" ? "Pickup" : kind === "dropoff" ? "Drop-off" : null);
   element.setAttribute(
     "aria-label",
-    kind === "vehicle"
-      ? "Latest vehicle position"
-      : kind === "pickup"
-        ? "Pickup location"
-        : "Drop-off location",
+    resolvedLabel
+      ? `${resolvedLabel} location`
+      : "Latest vehicle position",
   );
   element.className =
     kind === "vehicle"
@@ -43,11 +49,11 @@ function markerElement(kind: "pickup" | "dropoff" | "vehicle") {
   icon.append(path);
   element.append(icon);
 
-  if (kind !== "vehicle") {
+  if (resolvedLabel) {
     const label = document.createElement("span");
     label.className =
       "pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-1 text-[11px] font-semibold text-foreground shadow-[0_4px_12px_rgb(20_22_26/20%)]";
-    label.textContent = kind === "pickup" ? "Pickup" : "Drop-off";
+    label.textContent = resolvedLabel;
     element.append(label);
   }
 
@@ -120,29 +126,6 @@ function clearRoute(map: mapboxgl.Map) {
   if (source && "setData" in source) {
     source.setData(emptyRoute());
   }
-}
-
-async function fetchDrivingRoute(
-  token: string,
-  from: [number, number],
-  to: [number, number],
-  signal: AbortSignal,
-) {
-  const url = new URL(
-    `https://api.mapbox.com/directions/v5/mapbox/driving/${from.join(",")};${to.join(",")}`,
-  );
-  url.searchParams.set("geometries", "geojson");
-  url.searchParams.set("overview", "full");
-  url.searchParams.set("access_token", token);
-
-  const response = await fetch(url, { signal });
-  if (!response.ok) return null;
-
-  const body = (await response.json()) as {
-    routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
-  };
-  const coordinates = body.routes?.[0]?.geometry?.coordinates;
-  return coordinates?.length ? coordinates : null;
 }
 
 export function OperationsMap({
@@ -267,6 +250,9 @@ export function OperationsMap({
     const current: [number, number] | null = trip.latestPosition
       ? [trip.latestPosition.longitude, trip.latestPosition.latitude]
       : null;
+    const actualDropoffLabel = hasActualDropoffMismatch(trip)
+      ? "Actual drop-off"
+      : undefined;
 
     markersRef.current = [
       new mapboxgl.Marker({ element: markerElement("pickup") })
@@ -277,7 +263,9 @@ export function OperationsMap({
         .addTo(map),
       ...(current
         ? [
-            new mapboxgl.Marker({ element: markerElement("vehicle") })
+            new mapboxgl.Marker({
+              element: markerElement("vehicle", actualDropoffLabel),
+            })
               .setLngLat(current)
               .addTo(map),
           ]
@@ -319,6 +307,12 @@ export function OperationsMap({
         const bounds = new mapboxgl.LngLatBounds(pickup, pickup);
         bounds.extend(dropoff);
         for (const point of coordinates ?? []) bounds.extend(point);
+        if (trip?.latestPosition) {
+          bounds.extend([
+            trip.latestPosition.longitude,
+            trip.latestPosition.latitude,
+          ]);
+        }
         map.fitBounds(bounds, {
           padding: { top: 88, right: 88, bottom: 88, left: 88 },
           maxZoom: 13,

@@ -36,7 +36,7 @@ export const listTripsQuerySchema = z.object({
 });
 
 export const simulationRequestSchema = z.object({
-  intervalMs: z.number().int().min(250).max(60_000).default(1_000),
+  intervalMs: z.number().int().min(250).max(60_000).optional(),
 });
 
 export const resolveGoogleMapsLinkSchema = z.object({

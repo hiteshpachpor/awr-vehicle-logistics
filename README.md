@@ -2,7 +2,7 @@
 
 Backend foundation for the AWR vehicle live-tracking assignment. It provides
 trip management, vendor location ingestion, PostgreSQL-backed SSE delivery, and
-a configurable trip simulator. The dashboard will be implemented separately.
+a trip simulator that follows the mapped driving route.
 
 ## Architecture
 
@@ -105,8 +105,9 @@ Open `/` and sign in with the password `password`.
   cancel ready trips.
 - A vendor Controller uses `/vendor/:vendorId/trips` and can assign that
   vendor's drivers.
-- A Driver uses `/vendor/:vendorId/driver/:driverId/trips`, can start and end
-  assigned trips, and shares browser geolocation while a trip is in transit.
+- A Driver uses `/vendor/:vendorId/driver/:driverId/trips`, can start, simulate,
+  and end assigned trips. Simulated trips follow the mapped route; real trips
+  share browser geolocation while in transit.
 
 The demo session is stored in the browser. APIs remain unauthenticated by
 design.
@@ -205,17 +206,18 @@ position ID is the SSE cursor.
 ### Simulator
 
 ```text
+GET    /api/trips/:id/simulation
 POST   /api/trips/:id/simulation
 DELETE /api/trips/:id/simulation
 ```
 
-```json
-{ "intervalMs": 1000 }
-```
-
-Starting a simulator starts a newly created trip. It sends the predefined route
-through the same ingestion service as vendor traffic and completes the trip
-when the route is exhausted. Deleting stops the current simulation without
+Starting a simulation starts a scheduled trip, then walks the same Mapbox
+driving route shown on the map. It posts one GPS ping immediately at pickup
+and another every 5 seconds, advancing 1 km along the polyline each time,
+through the same ingestion service as vendor traffic. The trip stays in
+transit when the vehicle reaches drop-off so the driver can end it. If Mapbox
+directions are unavailable, the simulator falls back to a straight line
+between pickup and drop-off. Deleting stops the current simulation without
 completing the trip.
 
 ## Quality checks
