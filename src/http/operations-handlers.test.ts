@@ -25,7 +25,7 @@ describe("operations HTTP handlers", () => {
     vi.mocked(app.operationsService.listVehicles).mockResolvedValue([
       {
         id: "vehicle-id",
-        registrationNumber: "DUBAI-A-48291",
+        registrationNumber: "Dubai A 48291",
         make: "Nissan",
         model: "Patrol",
         color: "White",
@@ -42,7 +42,7 @@ describe("operations HTTP handlers", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      data: [{ registrationNumber: "DUBAI-A-48291" }],
+      data: [{ registrationNumber: "Dubai A 48291" }],
     });
     expect(app.operationsService.listVehicles).toHaveBeenCalledWith(
       "00000000-0000-4000-8000-000000000001",

@@ -19,7 +19,7 @@ const trip = {
     dropoffAddress: "Sharjah",
   },
   vehicle: {
-    registrationNumber: "DUBAI-A-48291",
+    registrationNumber: "Dubai A 48291",
     make: "Nissan",
     model: "Patrol",
   },

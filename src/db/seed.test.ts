@@ -47,6 +47,21 @@ describe("realistic UAE seed data", () => {
     ).toBe(true);
   });
 
+  it("uses realistic UAE registration plates", () => {
+    const uaePlate =
+      /^(Dubai [A-HJ-NP-Z] \d{1,5}|Abu Dhabi (?:[1-9]|1[0-8]|50) \d{1,5}|Sharjah [145-9] \d{1,5}|Ajman [A-Z] \d{1,5}|RAK [A-Z] \d{1,5})$/;
+
+    expect(
+      new Set(seededVehicles.map(({ registrationNumber }) => registrationNumber))
+        .size,
+    ).toBe(30);
+    expect(
+      seededVehicles.every(({ registrationNumber }) =>
+        uaePlate.test(registrationNumber),
+      ),
+    ).toBe(true);
+  });
+
   it("assigns drivers across imaginary logistics vendors", () => {
     expect(seededVendors).toHaveLength(5);
     expect(seededDrivers).toHaveLength(10);
