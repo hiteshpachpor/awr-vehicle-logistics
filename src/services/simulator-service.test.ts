@@ -92,6 +92,12 @@ describe("SimulatorService", () => {
       "simulator",
     );
     expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
+
+    expect(locations.ingest).toHaveBeenCalledTimes(2);
+    expect(trips.transition).toHaveBeenCalledWith("trip", "completed");
     expect(simulator.isRunning("trip")).toBe(false);
     expect(simulator.stop("trip")).toBe(false);
   });
@@ -156,6 +162,12 @@ describe("SimulatorService", () => {
       }),
       "simulator",
     );
+    expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(locations.ingest).toHaveBeenCalledTimes(2);
+    expect(trips.transition).toHaveBeenCalledWith("trip", "completed");
     expect(simulator.isRunning("trip")).toBe(false);
     expect(simulator.getStatus("trip")).toEqual({ status: "idle" });
   });

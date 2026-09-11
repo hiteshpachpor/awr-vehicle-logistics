@@ -20,7 +20,10 @@ import type {
   TripView,
 } from "@/lib/operations-types";
 import { getApiErrorMessage, matchesTrip } from "@/lib/operations-ui";
-import type { SimulationPace } from "@/lib/simulation";
+import {
+  SIMULATION_INTERVAL_MS,
+  type SimulationPace,
+} from "@/lib/simulation";
 
 export type OperationsNotice = {
   type: "success" | "error";
@@ -313,6 +316,44 @@ export function useOperationsDashboard({
     setSelectedId(updated.trip.id);
     setLastRefresh(new Date());
   }, []);
+
+  useEffect(() => {
+    if (!simulating || !selectedId) {
+      return;
+    }
+
+    const tripId = selectedId;
+    const intervalMs = simulationPace?.intervalMs ?? SIMULATION_INTERVAL_MS;
+    let active = true;
+
+    async function refreshSimulatedTrip() {
+      try {
+        const response = await fetch(`/api/trips/${tripId}`, {
+          cache: "no-store",
+        });
+        const body = (await response.json()) as TripView | ApiErrorBody;
+        if (!active || !response.ok || !("trip" in body)) {
+          return;
+        }
+        if (body.trip.status !== "in_transit") {
+          replaceTrip(body);
+          setSimulating(false);
+          setSimulationPace(null);
+        }
+      } catch {
+        // The next interval retries; the live map still updates over SSE.
+      }
+    }
+
+    const timer = window.setInterval(() => {
+      void refreshSimulatedTrip();
+    }, intervalMs);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [replaceTrip, selectedId, simulating, simulationPace?.intervalMs]);
 
   async function transitionTrip(status: TripStatus) {
     if (!selectedId) return;

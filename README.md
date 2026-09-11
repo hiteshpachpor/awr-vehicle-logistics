@@ -217,10 +217,10 @@ driving route shown on the map. The request body may include `intervalMs`
 every 5 seconds advancing 1 km. It posts one GPS ping immediately at pickup and
 another at each interval, through the same ingestion service as vendor traffic.
 The reported speed is derived from those two values (3 km every 10 seconds is
-1,080 km/h). The trip stays in transit when the vehicle reaches drop-off so the
-driver can end it. If Mapbox directions are unavailable, the simulator falls
-back to a straight line between pickup and drop-off. Deleting stops the current
-simulation without completing the trip.
+1,080 km/h). After the vehicle pings drop-off, the simulator waits one more
+interval and then completes the trip. If Mapbox directions are unavailable, the
+simulator falls back to a straight line between pickup and drop-off. Deleting
+stops the current simulation without completing the trip.
 
 ## Quality checks
 

@@ -189,6 +189,7 @@ export class SimulatorService {
     }
     const point = simulation.route[simulation.nextPoint];
     if (!point) {
+      await this.trips.transition(tripId, "completed");
       this.stop(tripId);
       return;
     }
@@ -208,8 +209,5 @@ export class SimulatorService {
       "simulator",
     );
     simulation.nextPoint += 1;
-    if (simulation.nextPoint >= simulation.route.length) {
-      this.stop(tripId);
-    }
   }
 }
