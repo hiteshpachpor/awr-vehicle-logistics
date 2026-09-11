@@ -95,6 +95,7 @@ describe("TripService", () => {
         .mockResolvedValueOnce(before)
         .mockResolvedValueOnce(after),
       findAssignableDriver: vi.fn().mockResolvedValue({ id: after.driver!.id }),
+      listDriverOccupancy: vi.fn().mockResolvedValue([]),
       updateDriver: vi.fn().mockResolvedValue(after.trip),
     } as unknown as TripRepository;
     const positions = {
@@ -108,7 +109,56 @@ describe("TripService", () => {
       after.driver!.id,
       before.trip.vendorId,
     );
+    expect(repository.listDriverOccupancy).toHaveBeenCalledWith(after.driver!.id);
     expect(result.driver?.id).toBe(after.driver!.id);
+  });
+
+  it("rejects a driver whose other trip is scheduled within 3 hours", async () => {
+    const trip = tripDetails("created");
+    trip.trip.driverId = null;
+    trip.driver = null;
+    trip.trip.scheduledAt = new Date("2026-09-11T12:00:00Z");
+    const repository = {
+      findById: vi.fn().mockResolvedValue(trip),
+      findAssignableDriver: vi.fn().mockResolvedValue({ id: "driver-2" }),
+      listDriverOccupancy: vi.fn().mockResolvedValue([
+        {
+          id: "other-trip",
+          status: "created",
+          scheduledAt: new Date("2026-09-11T14:00:00Z"),
+        },
+      ]),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn(),
+    } as unknown as PositionRepository;
+    const service = new TripService(repository, positions);
+
+    await expect(
+      service.assignDriver(trip.trip.id, "driver-2"),
+    ).rejects.toMatchObject({
+      code: "DRIVER_SCHEDULE_CONFLICT",
+    });
+  });
+
+  it("rejects starting a trip when the driver is already in transit", async () => {
+    const before = tripDetails("created");
+    const repository = {
+      findById: vi.fn().mockResolvedValue(before),
+      listDriverOccupancy: vi.fn().mockResolvedValue([
+        { id: "other-trip", status: "in_transit", scheduledAt: null },
+      ]),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn(),
+    } as unknown as PositionRepository;
+    const service = new TripService(repository, positions);
+
+    await expect(
+      service.transition(before.trip.id, "in_transit"),
+    ).rejects.toMatchObject({
+      code: "DRIVER_IN_TRANSIT_TRIP_EXISTS",
+    });
   });
 
   it("rejects a driver outside the trip vendor", async () => {
@@ -137,6 +187,7 @@ describe("TripService", () => {
         .fn()
         .mockResolvedValueOnce(before)
         .mockResolvedValueOnce(after),
+      listDriverOccupancy: vi.fn().mockResolvedValue([]),
       updateStatus: vi.fn().mockResolvedValue(after.trip),
     } as unknown as TripRepository;
     const positions = {

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import {
   customers,
@@ -115,6 +115,22 @@ export class TripRepository {
     return query
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(trips.updatedAt));
+  }
+
+  async listDriverOccupancy(driverId: string) {
+    return this.db
+      .select({
+        id: trips.id,
+        status: trips.status,
+        scheduledAt: trips.scheduledAt,
+      })
+      .from(trips)
+      .where(
+        and(
+          eq(trips.driverId, driverId),
+          inArray(trips.status, ["created", "in_transit"]),
+        ),
+      );
   }
 
   async findAssignableDriver(id: string, vendorId: string) {

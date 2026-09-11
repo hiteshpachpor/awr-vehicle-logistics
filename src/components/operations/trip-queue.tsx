@@ -46,6 +46,7 @@ export function TripQueue({
   drivers,
   assigningTripId,
   onAssignDriver,
+  showVendor = true,
 }: {
   trips: TripView[];
   query: string;
@@ -57,6 +58,7 @@ export function TripQueue({
   drivers?: DriverOption[];
   assigningTripId?: string | null;
   onAssignDriver?: (tripId: string, driverId: string) => void;
+  showVendor?: boolean;
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(25);
   const [page, setPage] = useState(1);
@@ -129,21 +131,22 @@ export function TripQueue({
           <TripQueueSkeleton />
         ) : trips.length ? (
           <ul className="divide-y divide-border">
-            {pagedTrips.map((trip) => (
+            {pagedTrips.map((trip) => {
+              const canAssignDriver =
+                Boolean(onAssignDriver) && trip.trip.status === "created";
+
+              return (
               <li
                 key={trip.trip.id}
-                className={cn(
-                  "overflow-hidden transition-colors",
-                  onAssignDriver &&
-                    trip.trip.status === "created" &&
-                    "bg-background/35",
-                )}
+                className="overflow-hidden transition-colors"
               >
+                <div className="group relative grid p-4 outline-none transition-colors hover:bg-muted/45 min-[560px]:grid-cols-[minmax(180px,.8fr)_minmax(260px,1.2fr)] min-[560px]:gap-x-5 sm:p-5 lg:grid-cols-[minmax(145px,.65fr)_minmax(230px,1.15fr)_minmax(280px,1.2fr)_max-content_32px] lg:items-center lg:gap-6">
                 <Link
                   href={`/trips/${trip.trip.id}`}
-                  className="group relative grid p-4 outline-none transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring min-[560px]:grid-cols-[minmax(180px,.8fr)_minmax(260px,1.2fr)] min-[560px]:gap-x-5 sm:p-5 lg:grid-cols-[minmax(155px,.72fr)_minmax(260px,1.3fr)_minmax(210px,1fr)_max-content_32px] lg:items-center lg:gap-6"
-                >
-                  <span className="flex min-w-0 items-start gap-3">
+                  aria-label={`Open ${trip.customer.name} trip`}
+                  className="absolute inset-0 z-0 rounded-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                />
+                  <span className="pointer-events-none relative z-10 flex min-w-0 items-start gap-3">
                     <span className="min-w-0">
                       <span className="block truncate text-base font-semibold">
                         {trip.customer.name}
@@ -160,7 +163,7 @@ export function TripQueue({
                     </span>
                   </span>
 
-                  <span className="mt-4 flex min-w-0 items-stretch gap-3 text-sm min-[560px]:mt-0">
+                  <span className="pointer-events-none relative z-10 mt-4 flex min-w-0 items-stretch gap-3 text-sm min-[560px]:mt-0">
                     <span
                       aria-hidden="true"
                       className="flex w-6 shrink-0 flex-col items-center py-0.5"
@@ -194,52 +197,68 @@ export function TripQueue({
                     </span>
                   </span>
 
-                  <span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-border pt-4 min-[560px]:col-span-2 lg:contents">
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-1.5 text-sm leading-5">
-                        <CubeIcon
-                          size={14}
-                          weight="duotone"
-                          aria-hidden="true"
-                          className="relative -top-px shrink-0 text-muted-foreground"
-                        />
-                        <span className="sr-only">Vendor</span>
-                        <span className="truncate font-medium">
-                          {trip.vendor.name}
+                  <span className="relative z-10 mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-border pt-4 min-[560px]:col-span-2 lg:contents">
+                    <span className="relative z-20 min-w-0">
+                      {showVendor ? (
+                        <span className="pointer-events-none flex min-w-0 items-center gap-1.5 text-sm leading-5">
+                          <CubeIcon
+                            size={14}
+                            weight="duotone"
+                            aria-hidden="true"
+                            className="relative -top-px shrink-0 text-muted-foreground"
+                          />
+                          <span className="sr-only">Vendor</span>
+                          <span className="truncate font-medium">
+                            {trip.vendor.name}
+                          </span>
                         </span>
-                      </span>
-                      <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-4">
-                        <SteeringWheelIcon
-                          size={14}
-                          weight="duotone"
-                          aria-hidden="true"
-                          className="relative -top-px shrink-0 text-muted-foreground"
-                        />
-                        <span className="sr-only">Driver</span>
-                        <span className="truncate font-medium">
-                          {trip.driver?.name ?? "Unassigned"}
+                      ) : null}
+                      {canAssignDriver && onAssignDriver ? (
+                        <div className={showVendor ? "mt-1.5" : undefined}>
+                          <DriverAssignment
+                            trip={trip}
+                            drivers={drivers ?? []}
+                            assigning={assigningTripId === trip.trip.id}
+                            onAssign={onAssignDriver}
+                            inline
+                          />
+                        </div>
+                      ) : (
+                        <span
+                          className={cn(
+                            "pointer-events-none flex min-w-0 items-center gap-1.5 leading-4",
+                            showVendor
+                              ? "mt-1.5 text-xs"
+                              : "text-sm leading-5",
+                          )}
+                        >
+                          <SteeringWheelIcon
+                            size={14}
+                            weight="duotone"
+                            aria-hidden="true"
+                            className="relative -top-px shrink-0 text-muted-foreground"
+                          />
+                          <span className="sr-only">Driver</span>
+                          <span className="truncate font-medium">
+                            {trip.driver?.name ?? "Unassigned"}
+                          </span>
                         </span>
-                      </span>
+                      )}
                     </span>
-                    <TripMilestone trip={trip} />
+                    <span className="pointer-events-none">
+                      <TripMilestone trip={trip} />
+                    </span>
                   </span>
-                  <span className="trip-open-affordance hidden size-8 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-surface-strong group-hover:text-foreground lg:grid">
+                  <span className="trip-open-affordance pointer-events-none relative z-10 hidden size-8 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-surface-strong group-hover:text-foreground lg:grid">
                     <CaretRightIcon
                       size={16}
                       className="transition-transform group-hover:translate-x-0.5"
                     />
                   </span>
-                </Link>
-                {onAssignDriver && trip.trip.status === "created" ? (
-                  <DriverAssignment
-                    trip={trip}
-                    drivers={drivers ?? []}
-                    assigning={assigningTripId === trip.trip.id}
-                    onAssign={onAssignDriver}
-                  />
-                ) : null}
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <EmptyState
@@ -401,7 +420,7 @@ function TripMilestone({ trip }: { trip: TripView }) {
           : trip.trip.cancelledAt;
 
   return (
-    <span className="grid w-max justify-items-end gap-1.5 lg:justify-items-start">
+    <span className="grid w-max justify-items-end gap-1.5">
       <TripStatusBadge status={trip.trip.status} />
       <span className="text-xs text-muted-foreground">
         {timestamp ? formatRelativeTime(timestamp) : "Time not set"}

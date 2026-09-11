@@ -30,6 +30,11 @@ export function SearchSelect({
   id,
   disabled,
   triggerClassName,
+  contentClassName,
+  variant = "secondary",
+  size,
+  showTriggerDescription = true,
+  "aria-label": ariaLabel,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -39,6 +44,11 @@ export function SearchSelect({
   id?: string;
   disabled?: boolean;
   triggerClassName?: string;
+  contentClassName?: string;
+  variant?: "secondary" | "ghost";
+  size?: "default" | "sm";
+  showTriggerDescription?: boolean;
+  "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -67,11 +77,13 @@ export function SearchSelect({
         <Button
           id={id}
           type="button"
-          variant="secondary"
+          variant={variant}
+          size={size}
           role="combobox"
           aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"
+          aria-label={ariaLabel}
           className={cn(
             "w-full justify-between px-3 text-left font-normal",
             triggerClassName ?? "h-auto min-h-11 py-2",
@@ -87,7 +99,7 @@ export function SearchSelect({
             >
               {selected?.label ?? placeholder}
             </span>
-            {selected?.description ? (
+            {showTriggerDescription && selected?.description ? (
               <span className="block truncate text-xs text-muted-foreground">
                 {selected.description}
               </span>
@@ -99,7 +111,7 @@ export function SearchSelect({
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0">
+      <PopoverContent className={cn("p-0", contentClassName)}>
         <div className="flex items-center gap-2 border-b border-border px-3">
           <MagnifyingGlassIcon
             size={16}

@@ -84,7 +84,7 @@ describe("trip HTTP handlers", () => {
     });
   });
 
-  it("returns a specific conflict when a driver has an active trip", async () => {
+  it("returns a specific conflict when a driver already has an in-transit trip", async () => {
     const app = container();
     vi.mocked(app.tripService.create).mockRejectedValue(
       Object.assign(new Error("duplicate key"), {
@@ -107,8 +107,8 @@ describe("trip HTTP handlers", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: {
-        code: "DRIVER_ACTIVE_TRIP_EXISTS",
-        message: "This driver already has an active trip",
+        code: "DRIVER_IN_TRANSIT_TRIP_EXISTS",
+        message: "This driver already has an in-transit trip",
       },
     });
   });

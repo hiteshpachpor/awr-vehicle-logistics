@@ -281,6 +281,7 @@ export function OperationsDashboard({
               loading={loading}
               drivers={session?.role === "controller" ? drivers : undefined}
               assigningTripId={assigningTripId}
+              showVendor={session?.role === "operations"}
               onAssignDriver={
                 session?.role === "controller"
                   ? (tripId, selectedDriverId) =>

@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { CreateTripInput } from "@/domain/contracts";
 import {
+  driverHasOtherInTransitTrip,
+  driverScheduleConflict,
+} from "@/domain/driver-availability";
+import {
   ConflictError,
   InvalidStateTransitionError,
   NotFoundError,
@@ -102,6 +106,15 @@ export class TripService {
         "DRIVER_NOT_AVAILABLE",
       );
     }
+    const occupancy = await this.trips.listDriverOccupancy(driverId);
+    const scheduleConflict = driverScheduleConflict(
+      id,
+      existing.trip.scheduledAt,
+      occupancy,
+    );
+    if (scheduleConflict) {
+      throw new ConflictError(scheduleConflict.message, scheduleConflict.code);
+    }
     const updated = await this.trips.updateDriver(
       id,
       existing.trip.version,
@@ -126,11 +139,22 @@ export class TripService {
     if (!canTransition(existing.trip.status, status)) {
       throw new InvalidStateTransitionError(existing.trip.status, status);
     }
-    if (status === "in_transit" && !existing.trip.driverId) {
-      throw new ConflictError(
-        "A driver must be assigned before the trip can start",
-        "DRIVER_NOT_ASSIGNED",
+    if (status === "in_transit") {
+      if (!existing.trip.driverId) {
+        throw new ConflictError(
+          "A driver must be assigned before the trip can start",
+          "DRIVER_NOT_ASSIGNED",
+        );
+      }
+      const occupancy = await this.trips.listDriverOccupancy(
+        existing.trip.driverId,
       );
+      if (driverHasOtherInTransitTrip(id, occupancy)) {
+        throw new ConflictError(
+          "This driver already has an in-transit trip",
+          "DRIVER_IN_TRANSIT_TRIP_EXISTS",
+        );
+      }
     }
 
     const updated = await this.trips.updateStatus(

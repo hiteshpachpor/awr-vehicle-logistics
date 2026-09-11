@@ -55,8 +55,8 @@ export function errorResponse(error: unknown) {
       return NextResponse.json(
         {
           error: {
-            code: "DRIVER_ACTIVE_TRIP_EXISTS",
-            message: "This driver already has an active trip",
+            code: "DRIVER_IN_TRANSIT_TRIP_EXISTS",
+            message: "This driver already has an in-transit trip",
           },
         },
         { status: 409 },

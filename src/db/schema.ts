@@ -147,7 +147,7 @@ export const trips = pgTable(
       .where(sql`${table.status} in ('created', 'in_transit')`),
     uniqueIndex("trips_driver_active_unique")
       .on(table.driverId)
-      .where(sql`${table.status} in ('created', 'in_transit')`),
+      .where(sql`${table.status} = 'in_transit'`),
   ],
 );
 

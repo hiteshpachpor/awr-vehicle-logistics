@@ -12,7 +12,20 @@ import {
 import { SimulatorService } from "@/services/simulator-service";
 import { TripService } from "@/services/trip-service";
 
-function buildContainer() {
+const globalForEvents = globalThis as unknown as {
+  positionEvents?: PostgresPositionEventSource;
+};
+
+function getPositionEvents() {
+  if (!globalForEvents.positionEvents) {
+    globalForEvents.positionEvents = new PostgresPositionEventSource(
+      getEnvironment().DATABASE_URL,
+    );
+  }
+  return globalForEvents.positionEvents;
+}
+
+export function getContainer() {
   const { db, pool } = getDatabase();
   const tripRepository = new TripRepository(db);
   const positionRepository = new PositionRepository(db);
@@ -25,9 +38,6 @@ function buildContainer() {
     positionRepository,
     positionPublisher,
   );
-  const positionEvents = new PostgresPositionEventSource(
-    getEnvironment().DATABASE_URL,
-  );
   const simulatorService = new SimulatorService(tripService, locationService);
 
   return {
@@ -35,20 +45,9 @@ function buildContainer() {
     operationsService,
     locationService,
     positionRepository,
-    positionEvents,
+    positionEvents: getPositionEvents(),
     simulatorService,
   };
 }
 
-export type AppContainer = ReturnType<typeof buildContainer>;
-
-const globalForContainer = globalThis as unknown as {
-  appContainer?: AppContainer;
-};
-
-export function getContainer(): AppContainer {
-  if (!globalForContainer.appContainer) {
-    globalForContainer.appContainer = buildContainer();
-  }
-  return globalForContainer.appContainer;
-}
+export type AppContainer = ReturnType<typeof getContainer>;

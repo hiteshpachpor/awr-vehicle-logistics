@@ -106,33 +106,67 @@ describe("database schema", () => {
     ).resolves.toBeDefined();
   });
 
-  it("allows only one active trip per driver", async () => {
+  it("allows multiple scheduled trips but only one in-transit trip per driver", async () => {
     const otherVehicle = seededVehicles[1]!;
+    const inTransitVehicle = seededVehicles[3]!;
+    const secondInTransitVehicle = seededVehicles[4]!;
 
-    for (const [index, status] of ["created", "in_transit"].entries()) {
-      await expect(
-        database.db.insert(trips).values({
-          id: `00000000-0000-4000-9000-00000000001${index + 1}`,
-          referenceNumber: `TRIP-DRIVER-ACTIVE-${index + 1}`,
-          vehicleId: otherVehicle.id,
-          vendorId: seedIds.vendor,
-          driverId: seedIds.driver,
-          status: status as "created" | "in_transit",
-          pickupAddress: "Dubai",
-          pickupLatitude: 25.2,
-          pickupLongitude: 55.3,
-          dropoffAddress: "Sharjah",
-          dropoffLatitude: 25.3,
-          dropoffLongitude: 55.4,
-        }),
-      ).rejects.toThrow();
-    }
+    await expect(
+      database.db.insert(trips).values({
+        id: "00000000-0000-4000-9000-000000000011",
+        referenceNumber: "TRIP-DRIVER-SCHEDULED-2",
+        vehicleId: otherVehicle.id,
+        vendorId: seedIds.vendor,
+        driverId: seedIds.driver,
+        status: "created",
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      }),
+    ).resolves.toBeDefined();
+
+    await expect(
+      database.db.insert(trips).values({
+        id: "00000000-0000-4000-9000-000000000012",
+        referenceNumber: "TRIP-DRIVER-IN-TRANSIT-1",
+        vehicleId: inTransitVehicle.id,
+        vendorId: seedIds.vendor,
+        driverId: seedIds.driver,
+        status: "in_transit",
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      }),
+    ).resolves.toBeDefined();
 
     await expect(
       database.db.insert(trips).values({
         id: "00000000-0000-4000-9000-000000000013",
+        referenceNumber: "TRIP-DRIVER-IN-TRANSIT-2",
+        vehicleId: secondInTransitVehicle.id,
+        vendorId: seedIds.vendor,
+        driverId: seedIds.driver,
+        status: "in_transit",
+        pickupAddress: "Dubai",
+        pickupLatitude: 25.2,
+        pickupLongitude: 55.3,
+        dropoffAddress: "Sharjah",
+        dropoffLatitude: 25.3,
+        dropoffLongitude: 55.4,
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      database.db.insert(trips).values({
+        id: "00000000-0000-4000-9000-000000000014",
         referenceNumber: "TRIP-DRIVER-COMPLETED-1",
-        vehicleId: otherVehicle.id,
+        vehicleId: secondInTransitVehicle.id,
         vendorId: seedIds.vendor,
         driverId: seedIds.driver,
         status: "completed",

@@ -13,12 +13,14 @@ export function DriverAssignment({
   assigning,
   onAssign,
   compact = false,
+  inline = false,
 }: {
   trip: TripView;
   drivers: DriverOption[];
   assigning: boolean;
   onAssign: (tripId: string, driverId: string) => void;
   compact?: boolean;
+  inline?: boolean;
 }) {
   const assignedDriverId = trip.driver?.id ?? "";
   const [driverId, setDriverId] = useState(assignedDriverId);
@@ -26,6 +28,7 @@ export function DriverAssignment({
     (driver) => driver.vendor.id === trip.vendor.id,
   );
   const hasChange = Boolean(driverId) && driverId !== assignedDriverId;
+  const embedded = compact || inline;
 
   useEffect(() => {
     setDriverId(assignedDriverId);
@@ -35,12 +38,16 @@ export function DriverAssignment({
     <div
       className={cn(
         "flex flex-col gap-3 sm:flex-row sm:items-center",
-        compact
-          ? "mt-1.5"
-          : "border-t border-border bg-background px-4 py-3 sm:px-5 sm:py-4",
+        inline
+          ? "relative z-20 min-w-0"
+          : compact
+            ? "mt-1.5"
+            : "border-t border-border bg-background px-4 py-3 sm:px-5 sm:py-4",
       )}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      {compact ? null : (
+      {embedded ? null : (
         <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
             <SteeringWheelIcon size={18} weight="duotone" />
@@ -54,11 +61,15 @@ export function DriverAssignment({
       )}
       <div
         className={cn(
-          "flex min-w-0 flex-col gap-2 sm:flex-row",
-          compact ? "w-full" : "sm:w-[360px]",
+          "flex min-w-0",
+          inline
+            ? "items-center gap-2"
+            : embedded
+              ? "w-full flex-col gap-2 sm:flex-row sm:items-center"
+              : "flex-col gap-2 sm:w-[360px] sm:flex-row sm:items-center",
         )}
       >
-        <div className="min-w-0 flex-1">
+        <div className={cn("min-w-0", inline ? "w-[184px] shrink-0" : "flex-1")}>
           <SearchSelect
             value={driverId}
             onValueChange={setDriverId}
@@ -73,7 +84,8 @@ export function DriverAssignment({
             }
             searchPlaceholder="Search drivers"
             disabled={assigning || !vendorDrivers.length}
-            triggerClassName="h-11 min-h-11 py-1"
+            triggerClassName="h-11 min-h-11 px-3 py-1"
+            contentClassName={inline ? "w-[220px]" : undefined}
           />
         </div>
         {hasChange || assigning ? (
