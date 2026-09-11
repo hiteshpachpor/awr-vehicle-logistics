@@ -153,7 +153,7 @@ export function useOperationsDashboard({
   }, [focused, loading, router, session?.role, trips]);
 
   useEffect(() => {
-    if (focused || session?.role !== "controller" || drivers.length) return;
+    if (session?.role !== "controller" || drivers.length) return;
 
     const query = `?vendorId=${encodeURIComponent(session.vendorId)}`;
     void fetch(`/api/drivers${query}`, { cache: "no-store" })
@@ -174,7 +174,7 @@ export function useOperationsDashboard({
             reason instanceof Error ? reason.message : "Try refreshing.",
         });
       });
-  }, [drivers.length, focused, session]);
+  }, [drivers.length, session]);
 
   useEffect(() => {
     if (!focused || !selectedId) return;

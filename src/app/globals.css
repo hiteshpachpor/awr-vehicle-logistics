@@ -121,6 +121,16 @@ button:disabled {
   border-color: var(--primary);
 }
 
+.trip-open-affordance {
+  display: none !important;
+}
+
+@media (min-width: 64rem) {
+  .trip-open-affordance {
+    display: grid !important;
+  }
+}
+
 ::selection {
   background: color-mix(in srgb, var(--primary) 24%, transparent);
 }

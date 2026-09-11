@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CaretDownIcon,
+  CaretLeftIcon,
   CaretRightIcon,
   CarIcon,
   CubeIcon,
@@ -12,9 +13,7 @@ import {
   MapPinIcon,
   SteeringWheelIcon,
 } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SearchSelect } from "@/components/ui/search-select";
 import type {
   DriverOption,
   TripStatus,
@@ -23,6 +22,7 @@ import type {
 import { formatRelativeTime } from "@/lib/operations-ui";
 import { cn } from "@/lib/utils";
 import { TripStatusBadge } from "./trip-status-badge";
+import { DriverAssignment } from "./driver-assignment";
 
 const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -31,6 +31,9 @@ const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+const PAGE_SIZES = [10, 25, 50] as const;
+type PageSize = (typeof PAGE_SIZES)[number];
 
 export function TripQueue({
   trips,
@@ -55,6 +58,25 @@ export function TripQueue({
   assigningTripId?: string | null;
   onAssignDriver?: (tripId: string, driverId: string) => void;
 }) {
+  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(trips.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const rangeStart = trips.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const rangeEnd = Math.min(currentPage * pageSize, trips.length);
+  const pagedTrips = trips.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, pageSize, query]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   return (
     <section className="w-full self-start">
       <div className="mb-5">
@@ -107,7 +129,7 @@ export function TripQueue({
           <TripQueueSkeleton />
         ) : trips.length ? (
           <ul className="divide-y divide-border">
-            {trips.map((trip) => (
+            {pagedTrips.map((trip) => (
               <li
                 key={trip.trip.id}
                 className={cn(
@@ -121,7 +143,7 @@ export function TripQueue({
                   href={`/trips/${trip.trip.id}`}
                   className="group relative grid p-4 outline-none transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring min-[560px]:grid-cols-[minmax(180px,.8fr)_minmax(260px,1.2fr)] min-[560px]:gap-x-5 sm:p-5 lg:grid-cols-[minmax(155px,.72fr)_minmax(260px,1.3fr)_minmax(210px,1fr)_max-content_32px] lg:items-center lg:gap-6"
                 >
-                  <span className="flex min-w-0 items-start gap-3 pr-12 min-[560px]:pr-0">
+                  <span className="flex min-w-0 items-start gap-3">
                     <span className="min-w-0">
                       <span className="block truncate text-base font-semibold">
                         {trip.customer.name}
@@ -201,7 +223,7 @@ export function TripQueue({
                     </span>
                     <TripMilestone trip={trip} />
                   </span>
-                  <span className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-surface-strong group-hover:text-foreground sm:right-5 sm:top-5 lg:static">
+                  <span className="trip-open-affordance hidden size-8 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-surface-strong group-hover:text-foreground lg:grid">
                     <CaretRightIcon
                       size={16}
                       className="transition-transform group-hover:translate-x-0.5"
@@ -227,10 +249,145 @@ export function TripQueue({
             description="Change the filter or create a new trip."
           />
         )}
+        {!loading && trips.length ? (
+          <TripPagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={trips.length}
+            totalPages={totalPages}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        ) : null}
         </div>
       </div>
     </section>
   );
+}
+
+function TripPagination({
+  page,
+  pageSize,
+  total,
+  totalPages,
+  rangeStart,
+  rangeEnd,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: PageSize;
+  total: number;
+  totalPages: number;
+  rangeStart: number;
+  rangeEnd: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: PageSize) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">
+          Per page
+        </span>
+        <div
+          className="flex gap-1"
+          role="group"
+          aria-label="Results per page"
+        >
+          {PAGE_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              aria-pressed={pageSize === size}
+              onClick={() => onPageSizeChange(size)}
+              className={cn(
+                "min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                pageSize === size
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {rangeStart}–{rangeEnd} of {total}
+        </span>
+      </div>
+      <nav
+        className="flex flex-wrap items-center gap-1"
+        aria-label="Trip list pages"
+      >
+        <button
+          type="button"
+          aria-label="Previous page"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          className="grid size-8 place-items-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+        >
+          <CaretLeftIcon size={16} />
+        </button>
+        {pageNumbers(page, totalPages).map((item, index) =>
+          item === "ellipsis" ? (
+            <span
+              key={`ellipsis-${index}`}
+              className="grid size-8 place-items-center text-xs text-muted-foreground"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              aria-current={item === page ? "page" : undefined}
+              aria-label={`Page ${item}`}
+              onClick={() => onPageChange(item)}
+              className={cn(
+                "min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                item === page
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {item}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          aria-label="Next page"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          className="grid size-8 place-items-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+        >
+          <CaretRightIcon size={16} />
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+function pageNumbers(current: number, total: number): Array<number | "ellipsis"> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  const items: Array<number | "ellipsis"> = [];
+  const windowStart = Math.max(2, current - 1);
+  const windowEnd = Math.min(total - 1, current + 1);
+
+  items.push(1);
+  if (windowStart > 2) items.push("ellipsis");
+  for (let page = windowStart; page <= windowEnd; page += 1) {
+    items.push(page);
+  }
+  if (windowEnd < total - 1) items.push("ellipsis");
+  items.push(total);
+  return items;
 }
 
 function TripMilestone({ trip }: { trip: TripView }) {
@@ -250,71 +407,6 @@ function TripMilestone({ trip }: { trip: TripView }) {
         {timestamp ? formatRelativeTime(timestamp) : "Time not set"}
       </span>
     </span>
-  );
-}
-
-function DriverAssignment({
-  trip,
-  drivers,
-  assigning,
-  onAssign,
-}: {
-  trip: TripView;
-  drivers: DriverOption[];
-  assigning: boolean;
-  onAssign: (tripId: string, driverId: string) => void;
-}) {
-  const [driverId, setDriverId] = useState(trip.driver?.id ?? "");
-  const vendorDrivers = drivers.filter(
-    (driver) => driver.vendor.id === trip.vendor.id,
-  );
-
-  return (
-    <div className="flex flex-col gap-3 border-t border-border bg-background p-3 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-          <SteeringWheelIcon size={18} weight="duotone" />
-        </span>
-        <span className="min-w-0">
-          <span className="block text-xs font-semibold">Assign driver</span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-            {trip.vendor.name}
-          </span>
-        </span>
-      </div>
-      <div className="flex min-w-0 flex-col gap-2 sm:w-[360px] sm:flex-row">
-        <div className="min-w-0 flex-1">
-        <SearchSelect
-          value={driverId}
-          onValueChange={setDriverId}
-          options={vendorDrivers.map((driver) => ({
-            value: driver.id,
-            label: driver.name,
-            description: driver.externalReference ?? undefined,
-            searchText: driver.phone ?? "",
-          }))}
-          placeholder={
-            vendorDrivers.length ? "Choose driver" : "No active drivers"
-          }
-          searchPlaceholder="Search drivers"
-          disabled={assigning || !vendorDrivers.length}
-          triggerClassName="h-11 min-h-11 py-1"
-        />
-        </div>
-        <Button
-          type="button"
-          className="h-11 shrink-0"
-          disabled={!driverId || assigning || driverId === trip.driver?.id}
-          onClick={() => onAssign(trip.trip.id, driverId)}
-        >
-          {assigning
-            ? "Saving…"
-            : trip.driver
-              ? "Update"
-              : "Assign"}
-        </Button>
-      </div>
-    </div>
   );
 }
 

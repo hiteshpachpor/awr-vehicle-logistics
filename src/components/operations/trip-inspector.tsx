@@ -29,7 +29,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import type { DriverLocationStatus } from "@/hooks/use-driver-location";
 import type { StreamStatus } from "@/hooks/use-trip-events";
-import type { TripStatus, TripView } from "@/lib/operations-types";
+import type { DriverOption, TripStatus, TripView } from "@/lib/operations-types";
 import {
   availableTripActionsForRole,
   formatCoordinates,
@@ -38,6 +38,7 @@ import {
   formatRelativeTime,
   formatSpeed,
 } from "@/lib/operations-ui";
+import { DriverAssignment } from "./driver-assignment";
 import { TripStatusBadge } from "./trip-status-badge";
 
 const streamLabels: Record<StreamStatus, string> = {
@@ -59,6 +60,9 @@ export function TripInspector({
   locationError,
   onTransition,
   focused,
+  drivers,
+  assigningTripId,
+  onAssignDriver,
 }: {
   trip: TripView | null;
   streamStatus: StreamStatus;
@@ -70,6 +74,9 @@ export function TripInspector({
   locationError: string | null;
   onTransition: (status: TripStatus) => void;
   focused?: boolean;
+  drivers?: DriverOption[];
+  assigningTripId?: string | null;
+  onAssignDriver?: (tripId: string, driverId: string) => void;
 }) {
   const actions = trip
     ? availableTripActionsForRole(
@@ -209,16 +216,40 @@ export function TripInspector({
             label="Customer"
             value={trip.customer.name}
           />
-          <DetailItem
-            icon={<UserIcon weight="duotone" />}
-            label="Driver"
-            value={trip.driver?.name ?? "Not assigned yet"}
-            detail={
-              trip.driver
-                ? (trip.driver.phone ?? "No phone recorded")
-                : "The logistics vendor will assign a driver."
-            }
-          />
+          {role === "controller" &&
+          trip.trip.status === "created" &&
+          onAssignDriver ? (
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-muted-foreground [&>svg]:size-[17px]">
+                <UserIcon weight="duotone" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Driver
+                </p>
+                <DriverAssignment
+                  trip={trip}
+                  drivers={drivers ?? []}
+                  assigning={assigningTripId === trip.trip.id}
+                  onAssign={onAssignDriver}
+                  compact
+                />
+              </div>
+            </div>
+          ) : (
+            <DetailItem
+              icon={<UserIcon weight="duotone" />}
+              label="Driver"
+              value={trip.driver?.name ?? "Not assigned yet"}
+              detail={
+                trip.driver
+                  ? (trip.driver.phone ?? "No phone recorded")
+                  : role === "controller"
+                    ? undefined
+                    : "The logistics vendor will assign a driver."
+              }
+            />
+          )}
           <DetailItem
             icon={<CubeIcon weight="duotone" />}
             label="Logistics vendor"

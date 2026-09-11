@@ -259,6 +259,14 @@ export function OperationsDashboard({
               locationError={driverLocation.error}
               onTransition={(status) => void transitionTrip(status)}
               focused
+              drivers={session?.role === "controller" ? drivers : undefined}
+              assigningTripId={assigningTripId}
+              onAssignDriver={
+                session?.role === "controller"
+                  ? (tripId, selectedDriverId) =>
+                      void assignDriver(tripId, selectedDriverId)
+                  : undefined
+              }
             />
           </div>
         ) : (
