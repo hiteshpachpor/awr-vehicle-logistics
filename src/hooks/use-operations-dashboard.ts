@@ -19,7 +19,13 @@ import type {
   TripStatus,
   TripView,
 } from "@/lib/operations-types";
-import { getApiErrorMessage, matchesTrip } from "@/lib/operations-ui";
+import {
+  getApiErrorMessage,
+  matchesTrip,
+  tripTransitionFailureNotice,
+  tripTransitionSuccessNotice,
+  type TripTransitionStatus,
+} from "@/lib/operations-ui";
 import {
   SIMULATION_INTERVAL_MS,
   type SimulationPace,
@@ -29,6 +35,7 @@ export type OperationsNotice = {
   type: "success" | "error";
   title: string;
   description: string;
+  hint?: string;
 };
 
 export function useOperationsDashboard({
@@ -355,7 +362,7 @@ export function useOperationsDashboard({
     };
   }, [replaceTrip, selectedId, simulating, simulationPace?.intervalMs]);
 
-  async function transitionTrip(status: TripStatus) {
+  async function transitionTrip(status: TripTransitionStatus) {
     if (!selectedId) return;
     setMutating(true);
     setMutationError(null);
@@ -372,23 +379,31 @@ export function useOperationsDashboard({
       if (!response.ok) {
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
-      replaceTrip(body as TripView);
+      const updated = body as TripView;
+      replaceTrip(updated);
       if (status !== "in_transit") {
         setSimulating(false);
         setSimulationPace(null);
       }
+      setNotice(
+        tripTransitionSuccessNotice(status, updated.trip.referenceNumber),
+      );
     } catch (error) {
       if (error instanceof DriverLocationAccessError) {
-        setMutationError(startTripLocationError(error.reason));
+        const locationError = startTripLocationError(error.reason);
+        setMutationError(locationError);
+        setNotice({ type: "error", ...locationError });
         return;
       }
+      const description =
+        error instanceof Error
+          ? error.message
+          : "The trip could not be updated.";
       setMutationError({
         title: "The trip could not be updated",
-        description:
-          error instanceof Error
-            ? error.message
-            : "The trip could not be updated.",
+        description,
       });
+      setNotice(tripTransitionFailureNotice(status, description));
     } finally {
       setMutating(false);
     }

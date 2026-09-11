@@ -23,6 +23,7 @@ import { formatRelativeTime } from "@/lib/operations-ui";
 import { cn } from "@/lib/utils";
 import { TripStatusBadge } from "./trip-status-badge";
 import { DriverAssignment } from "./driver-assignment";
+import { VehiclePlate } from "./vehicle-plate";
 
 const filters: Array<{ value: "all" | TripStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -154,12 +155,10 @@ export function TripQueue({
                       <span className="mt-1 block truncate text-xs text-muted-foreground">
                         {trip.vehicle.make} {trip.vehicle.model}
                       </span>
-                      <span
-                        aria-label={`Registration ${trip.vehicle.registrationNumber}`}
-                        className="mt-2 inline-flex h-5 items-center rounded-[3px] border border-[#202124] bg-white px-1.5 text-[10px] font-semibold leading-none tracking-[0.06em] text-[#111214]"
-                      >
-                        {trip.vehicle.registrationNumber}
-                      </span>
+                      <VehiclePlate
+                        className="mt-2"
+                        registrationNumber={trip.vehicle.registrationNumber}
+                      />
                     </span>
                   </span>
 

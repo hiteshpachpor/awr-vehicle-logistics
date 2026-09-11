@@ -10,6 +10,60 @@ export const tripStatusLabels: Record<TripStatus, string> = {
 
 export type TripAction = "start" | "simulate" | "complete" | "cancel";
 export type WorkspaceRole = "operations" | "controller" | "driver";
+export type TripTransitionStatus = Extract<
+  TripStatus,
+  "in_transit" | "completed" | "cancelled"
+>;
+
+export function tripTransitionSuccessNotice(
+  status: TripTransitionStatus,
+  referenceNumber: string,
+) {
+  if (status === "in_transit") {
+    return {
+      type: "success" as const,
+      title: "Trip started",
+      description: `${referenceNumber} is now in transit.`,
+    };
+  }
+  if (status === "completed") {
+    return {
+      type: "success" as const,
+      title: "Trip ended",
+      description: `${referenceNumber} has been completed.`,
+    };
+  }
+  return {
+    type: "success" as const,
+    title: "Trip cancelled",
+    description: `${referenceNumber} has been cancelled.`,
+  };
+}
+
+export function tripTransitionFailureNotice(
+  status: TripTransitionStatus,
+  description: string,
+) {
+  if (status === "in_transit") {
+    return {
+      type: "error" as const,
+      title: "Trip could not be started",
+      description,
+    };
+  }
+  if (status === "completed") {
+    return {
+      type: "error" as const,
+      title: "Trip could not be ended",
+      description,
+    };
+  }
+  return {
+    type: "error" as const,
+    title: "Trip could not be cancelled",
+    description,
+  };
+}
 
 export function availableTripActions(
   status: TripStatus,

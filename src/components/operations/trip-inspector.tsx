@@ -12,7 +12,7 @@ import {
   MapPinIcon,
   PathIcon,
   PlayIcon,
-  UserIcon,
+  SteeringWheelIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import {
@@ -36,11 +36,11 @@ import type { StreamStatus } from "@/hooks/use-trip-events";
 import type {
   DriverOption,
   TripMutationError,
-  TripStatus,
   TripView,
 } from "@/lib/operations-types";
 import {
   availableTripActionsForRole,
+  type TripTransitionStatus,
   formatCoordinates,
   formatDateTime,
   formatPositionSource,
@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DriverAssignment } from "./driver-assignment";
 import { TripStatusBadge } from "./trip-status-badge";
+import { VehiclePlate } from "./vehicle-plate";
 
 const streamLabels: Record<StreamStatus, string> = {
   idle: "Not connected",
@@ -103,9 +104,13 @@ export function TripIdentity({
           <p className="truncate text-lg font-semibold tracking-tight">
             {trip.customer.name}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {trip.vehicle.registrationNumber}
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {trip.vehicle.make} {trip.vehicle.model}
           </p>
+          <VehiclePlate
+            className="mt-2"
+            registrationNumber={trip.vehicle.registrationNumber}
+          />
         </div>
         <TripStatusBadge status={trip.trip.status} />
       </div>
@@ -161,7 +166,7 @@ export function TripInspector({
   locationStatus: DriverLocationStatus;
   locationError: string | null;
   locationPendingCount?: number;
-  onTransition: (status: TripStatus) => void;
+  onTransition: (status: TripTransitionStatus) => void;
   onSimulate?: (pace: SimulationPace) => void;
   simulating?: boolean;
   simulationPace?: SimulationPace | null;
@@ -265,31 +270,10 @@ export function TripInspector({
                 </AlertDialog>
               ) : null}
               {actions.includes("cancel") ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="secondary" disabled={mutating}>
-                      <XCircleIcon />
-                      Cancel trip
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Cancel this trip?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This ends the trip and prevents future location updates.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep trip</AlertDialogCancel>
-                      <AlertDialogAction
-                        destructive
-                        onClick={() => onTransition("cancelled")}
-                      >
-                        Cancel trip
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <CancelTripDialog
+                  mutating={mutating}
+                  onConfirm={() => onTransition("cancelled")}
+                />
               ) : null}
             </div>
 
@@ -308,59 +292,6 @@ export function TripInspector({
             ) : null}
           </DetailGroup>
         ) : null}
-
-        <DetailGroup title="Assignment">
-          <DetailItem
-            icon={<CarIcon weight="duotone" />}
-            label="Vehicle"
-            value={`${trip.vehicle.make} ${trip.vehicle.model}`}
-            detail={`${trip.vehicle.registrationNumber}${trip.vehicle.color ? `, ${trip.vehicle.color}` : ""}`}
-          />
-          <DetailItem
-            icon={<UserIcon weight="duotone" />}
-            label="Customer"
-            value={trip.customer.name}
-          />
-          {role === "controller" &&
-          trip.trip.status === "created" &&
-          onAssignDriver ? (
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-muted-foreground [&>svg]:size-[17px]">
-                <UserIcon weight="duotone" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Driver
-                </p>
-                <DriverAssignment
-                  trip={trip}
-                  drivers={drivers ?? []}
-                  assigning={assigningTripId === trip.trip.id}
-                  onAssign={onAssignDriver}
-                  compact
-                />
-              </div>
-            </div>
-          ) : (
-            <DetailItem
-              icon={<UserIcon weight="duotone" />}
-              label="Driver"
-              value={trip.driver?.name ?? "Not assigned yet"}
-              detail={
-                trip.driver
-                  ? (trip.driver.phone ?? "No phone recorded")
-                  : role === "controller"
-                    ? undefined
-                    : "The logistics vendor will assign a driver."
-              }
-            />
-          )}
-          <DetailItem
-            icon={<CubeIcon weight="duotone" />}
-            label="Logistics vendor"
-            value={trip.vendor.name}
-          />
-        </DetailGroup>
 
         <DetailGroup title="Route">
           <DetailItem
@@ -386,6 +317,48 @@ export function TripInspector({
             label="Scheduled collection"
             value={formatDateTime(trip.trip.scheduledAt)}
           />
+        </DetailGroup>
+
+        <DetailGroup title="Assignment">
+          <DetailItem
+            icon={<CubeIcon weight="duotone" />}
+            label="Logistics vendor"
+            value={trip.vendor.name}
+          />
+          {role === "controller" &&
+          trip.trip.status === "created" &&
+          onAssignDriver ? (
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-muted-foreground [&>svg]:size-[17px]">
+                <SteeringWheelIcon weight="duotone" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Driver
+                </p>
+                <DriverAssignment
+                  trip={trip}
+                  drivers={drivers ?? []}
+                  assigning={assigningTripId === trip.trip.id}
+                  onAssign={onAssignDriver}
+                  compact
+                />
+              </div>
+            </div>
+          ) : (
+            <DetailItem
+              icon={<SteeringWheelIcon weight="duotone" />}
+              label="Driver"
+              value={trip.driver?.name ?? "Not assigned yet"}
+              detail={
+                trip.driver
+                  ? (trip.driver.phone ?? "No phone recorded")
+                  : role === "controller"
+                    ? undefined
+                    : "The logistics vendor will assign a driver."
+              }
+            />
+          )}
         </DetailGroup>
 
         <DetailGroup title="Latest position">
@@ -456,6 +429,43 @@ export function TripInspector({
 
       </div>
     </aside>
+  );
+}
+
+function CancelTripDialog({
+  mutating,
+  onConfirm,
+}: {
+  mutating: boolean;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <Button
+        variant="secondary"
+        disabled={mutating}
+        onClick={() => setOpen(true)}
+      >
+        <XCircleIcon />
+        Cancel trip
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel this trip?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This ends the trip and prevents future location updates.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep trip</AlertDialogCancel>
+          <AlertDialogAction destructive onClick={onConfirm}>
+            Cancel trip
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

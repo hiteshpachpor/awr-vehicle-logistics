@@ -10,6 +10,8 @@ import {
   getApiErrorMessage,
   hasActualDropoffMismatch,
   matchesTrip,
+  tripTransitionFailureNotice,
+  tripTransitionSuccessNotice,
 } from "./operations-ui";
 import type { TripView } from "./operations-types";
 
@@ -88,6 +90,45 @@ describe("operations UI helpers", () => {
     expect(formatPositionSource("simulator")).toBe("Simulation");
     expect(formatPositionSource("vendor")).toBe("Vendor");
     expect(formatTripRoute(trip)).toBe("Dubai to Sharjah");
+  });
+
+  it("builds start, end, and cancel toasts", () => {
+    expect(tripTransitionSuccessNotice("in_transit", "TRIP-DEMO-001")).toEqual({
+      type: "success",
+      title: "Trip started",
+      description: "TRIP-DEMO-001 is now in transit.",
+    });
+    expect(tripTransitionSuccessNotice("completed", "TRIP-DEMO-001")).toEqual({
+      type: "success",
+      title: "Trip ended",
+      description: "TRIP-DEMO-001 has been completed.",
+    });
+    expect(tripTransitionSuccessNotice("cancelled", "TRIP-DEMO-001")).toEqual({
+      type: "success",
+      title: "Trip cancelled",
+      description: "TRIP-DEMO-001 has been cancelled.",
+    });
+    expect(
+      tripTransitionFailureNotice("in_transit", "Driver is already in transit."),
+    ).toEqual({
+      type: "error",
+      title: "Trip could not be started",
+      description: "Driver is already in transit.",
+    });
+    expect(
+      tripTransitionFailureNotice("completed", "Trip is not in transit."),
+    ).toEqual({
+      type: "error",
+      title: "Trip could not be ended",
+      description: "Trip is not in transit.",
+    });
+    expect(
+      tripTransitionFailureNotice("cancelled", "Trip is already completed."),
+    ).toEqual({
+      type: "error",
+      title: "Trip could not be cancelled",
+      description: "Trip is already completed.",
+    });
   });
 
   it("labels an actual drop-off only when a completed trip ended elsewhere", () => {

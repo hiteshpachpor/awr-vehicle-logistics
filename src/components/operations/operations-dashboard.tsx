@@ -386,6 +386,11 @@ export function OperationsDashboard({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {notice.description}
             </p>
+            {notice.hint ? (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {notice.hint}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
