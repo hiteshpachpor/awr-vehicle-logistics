@@ -38,6 +38,7 @@ import {
   formatRelativeTime,
   formatSpeed,
 } from "@/lib/operations-ui";
+import { cn } from "@/lib/utils";
 import { DriverAssignment } from "./driver-assignment";
 import { TripStatusBadge } from "./trip-status-badge";
 
@@ -48,6 +49,70 @@ const streamLabels: Record<StreamStatus, string> = {
   reconnecting: "Reconnecting",
   unavailable: "Updates unavailable",
 };
+
+export function TripBackLink({
+  href,
+  className,
+}: {
+  href: string;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0",
+        className,
+      )}
+    >
+      <ArrowLeftIcon size={14} />
+      All trips
+    </Link>
+  );
+}
+
+export function TripIdentity({
+  trip,
+  streamStatus,
+}: {
+  trip: TripView;
+  streamStatus: StreamStatus;
+}) {
+  return (
+    <>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="truncate text-lg font-semibold tracking-tight">
+            {trip.customer.name}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {trip.vehicle.registrationNumber}
+          </p>
+        </div>
+        <TripStatusBadge status={trip.trip.status} />
+      </div>
+      {trip.trip.status === "in_transit" ? (
+        <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <BroadcastIcon
+            size={16}
+            weight="duotone"
+            className={
+              streamStatus === "live"
+                ? "text-primary"
+                : "text-muted-foreground"
+            }
+          />
+          <span>{streamLabels[streamStatus]}</span>
+          {trip.latestPosition ? (
+            <span>
+              Last position {formatRelativeTime(trip.latestPosition.recordedAt)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 export function TripInspector({
   trip,
@@ -63,6 +128,7 @@ export function TripInspector({
   drivers,
   assigningTripId,
   onAssignDriver,
+  className,
 }: {
   trip: TripView | null;
   streamStatus: StreamStatus;
@@ -77,6 +143,7 @@ export function TripInspector({
   drivers?: DriverOption[];
   assigningTripId?: string | null;
   onAssignDriver?: (tripId: string, driverId: string) => void;
+  className?: string;
 }) {
   const actions = trip
     ? availableTripActionsForRole(
@@ -88,7 +155,15 @@ export function TripInspector({
 
   if (!trip) {
     return (
-      <aside className="min-h-72 bg-surface lg:border-l lg:border-border">
+      <aside
+        id="trip-details-panel"
+        role="tabpanel"
+        aria-labelledby="trip-details-tab"
+        className={cn(
+          "min-h-0 flex-1 bg-surface lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:border-r lg:border-border",
+          className,
+        )}
+      >
         <EmptyState
           className="h-full min-h-72 p-8"
           icon={<CarIcon weight="duotone" />}
@@ -100,49 +175,21 @@ export function TripInspector({
   }
 
   return (
-    <aside className="min-h-0 overflow-y-auto bg-surface lg:col-start-1 lg:row-start-1 lg:border-r lg:border-border">
-      <div className="border-b border-border p-5">
+    <aside
+      id="trip-details-panel"
+      role="tabpanel"
+      aria-labelledby="trip-details-tab"
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto bg-surface lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:border-r lg:border-border",
+        className,
+      )}
+    >
+      <div className="hidden border-b border-border p-5 lg:block">
         {focused &&
         !(role === "driver" && trip.trip.status === "in_transit") ? (
-          <Link
-            href={homeHref}
-            className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ArrowLeftIcon size={14} />
-            All trips
-          </Link>
+          <TripBackLink href={homeHref} className="mb-4" />
         ) : null}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-semibold tracking-tight">
-              {trip.customer.name}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {trip.vehicle.registrationNumber}
-            </p>
-          </div>
-          <TripStatusBadge status={trip.trip.status} />
-        </div>
-        {trip.trip.status === "in_transit" ? (
-          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-            <BroadcastIcon
-              size={16}
-              weight="duotone"
-              className={
-                streamStatus === "live"
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              }
-            />
-            <span>{streamLabels[streamStatus]}</span>
-            {trip.latestPosition ? (
-              <span>
-                Last position{" "}
-                {formatRelativeTime(trip.latestPosition.recordedAt)}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+        <TripIdentity trip={trip} streamStatus={streamStatus} />
       </div>
 
       <div className="grid gap-6 p-5">

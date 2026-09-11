@@ -26,10 +26,10 @@ export function LocationPingLog({
   return (
     <section
       aria-labelledby="location-pings-title"
-      className="flex min-h-0 flex-1 flex-col bg-surface lg:overflow-hidden"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface"
     >
-      <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
-        <div>
+      <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border px-4">
+        <div className="min-w-0">
           <h2 id="location-pings-title" className="text-sm font-semibold">
             Location pings
           </h2>
@@ -59,7 +59,7 @@ export function LocationPingLog({
       ) : error ? (
         <InlineAlert className="m-4">{error}</InlineAlert>
       ) : positions.length ? (
-        <ol className="divide-y divide-border/70 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        <ol className="min-h-0 flex-1 divide-y divide-border/70 overflow-y-auto">
           {positions.map((position) => (
             <li
               key={position.id}

@@ -15,10 +15,17 @@ import { Button } from "@/components/ui/button";
 import { useOperationsDashboard } from "@/hooks/use-operations-dashboard";
 import { getSessionHome } from "@/lib/demo-auth";
 import { formatTripRoute } from "@/lib/operations-ui";
+import { cn } from "@/lib/utils";
 import { LocationPingLog } from "./location-ping-log";
 import { OperationsMap } from "./operations-map";
-import { TripInspector } from "./trip-inspector";
+import {
+  TripBackLink,
+  TripIdentity,
+  TripInspector,
+} from "./trip-inspector";
 import { TripQueue } from "./trip-queue";
+
+type FocusedTab = "details" | "map" | "locations";
 
 export function OperationsDashboard({
   initialTripId = null,
@@ -34,7 +41,7 @@ export function OperationsDashboard({
   createdReference?: string;
 }) {
   const router = useRouter();
-  const [detailTab, setDetailTab] = useState<"map" | "locations">("map");
+  const [detailTab, setDetailTab] = useState<FocusedTab>("details");
   const {
     session,
     logout,
@@ -92,9 +99,22 @@ export function OperationsDashboard({
     selectedTrip?.trip.status === "in_transit"
       ? `/trips/${selectedTrip.trip.id}`
       : homeHref;
+  const showTripBackLink =
+    focused &&
+    !(
+      session?.role === "driver" &&
+      selectedTrip?.trip.status === "in_transit"
+    );
 
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-background lg:h-[100dvh] lg:overflow-hidden">
+    <main
+      className={cn(
+        "flex min-h-[100dvh] flex-col bg-background",
+        focused
+          ? "h-[100dvh] overflow-hidden"
+          : "lg:h-[100dvh] lg:overflow-hidden",
+      )}
+    >
       <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border bg-surface px-4 sm:px-5">
         <Link
           href={homeLinkHref}
@@ -179,73 +199,64 @@ export function OperationsDashboard({
         </div>
       ) : (
         focused ? (
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[380px_minmax(0,1fr)]">
-            <div className="flex min-w-0 flex-col bg-surface lg:col-start-2 lg:row-start-1 lg:min-h-0">
-              <div
-                role="tablist"
-                aria-label="Trip tracking view"
-                className="flex h-12 shrink-0 items-end gap-5 border-b border-border px-4"
-              >
-                {(["map", "locations"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    id={`trip-${tab}-tab`}
-                    type="button"
-                    role="tab"
-                    aria-selected={detailTab === tab}
-                    aria-controls={`trip-${tab}-panel`}
-                    onClick={() => setDetailTab(tab)}
-                    className={`relative h-full px-1 text-sm font-semibold outline-none transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:ring-2 focus-visible:ring-ring ${
-                      detailTab === tab
-                        ? "text-foreground after:bg-primary"
-                        : "text-muted-foreground after:bg-transparent hover:text-foreground"
-                    }`}
-                  >
-                    {tab === "map" ? "Map" : `Location pings (${positionLog.length})`}
-                  </button>
-                ))}
-              </div>
-
-              {detailTab === "map" ? (
-                <section
-                  id="trip-map-panel"
-                  role="tabpanel"
-                  aria-labelledby="trip-map-tab"
-                  className="flex min-h-[420px] min-w-0 flex-1 flex-col lg:min-h-0"
-                >
-                  <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border px-4">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-sm font-semibold">
-                        {selectedTrip
-                          ? formatTripRoute(selectedTrip)
-                          : "Live trip map"}
-                      </h2>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPinIcon size={13} weight="duotone" />
-                        {selectedTrip?.latestPosition
-                          ? "Showing latest reported position"
-                          : "Showing pickup and drop-off locations"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="min-h-72 flex-1">
-                    <OperationsMap trip={selectedTrip} />
-                  </div>
-                </section>
-              ) : (
-                <div
-                  id="trip-locations-panel"
-                  role="tabpanel"
-                  aria-labelledby="trip-locations-tab"
-                  className="flex min-h-0 flex-1 flex-col"
-                >
-                  <LocationPingLog
-                    positions={positionLog}
-                    loading={positionsLoading}
-                    error={positionsError}
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[380px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+            <div className="bg-surface px-5 pt-3 lg:hidden">
+              {showTripBackLink ? <TripBackLink href={homeHref} /> : null}
+              {selectedTrip ? (
+                <div className={cn(showTripBackLink && "mt-3", "pb-4")}>
+                  <TripIdentity
+                    trip={selectedTrip}
+                    streamStatus={streamStatus}
                   />
                 </div>
-              )}
+              ) : null}
+            </div>
+
+            <div
+              role="tablist"
+              aria-label="Trip view"
+              className="flex h-12 shrink-0 items-end gap-4 overflow-x-auto border-b border-border bg-surface px-5 lg:col-start-2 lg:row-start-1 lg:px-4"
+            >
+              {(
+                [
+                  { id: "details", label: "Details" },
+                  { id: "map", label: "Map" },
+                  {
+                    id: "locations",
+                    label: `Location pings (${positionLog.length})`,
+                  },
+                ] as const
+              ).map((tab) => {
+                const selected =
+                  tab.id === "map"
+                    ? detailTab === "map"
+                    : detailTab === tab.id;
+                const desktopMapFallback =
+                  tab.id === "map" && detailTab === "details";
+
+                return (
+                  <button
+                    key={tab.id}
+                    id={`trip-${tab.id}-tab`}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`trip-${tab.id}-panel`}
+                    onClick={() => setDetailTab(tab.id)}
+                    className={cn(
+                      "relative h-full shrink-0 whitespace-nowrap px-1 text-sm font-semibold outline-none transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:ring-2 focus-visible:ring-ring",
+                      tab.id === "details" && "lg:hidden",
+                      desktopMapFallback
+                        ? "text-muted-foreground after:bg-transparent hover:text-foreground lg:text-foreground lg:after:bg-primary"
+                        : selected
+                          ? "text-foreground after:bg-primary"
+                          : "text-muted-foreground after:bg-transparent hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
 
             <TripInspector
@@ -267,7 +278,60 @@ export function OperationsDashboard({
                       void assignDriver(tripId, selectedDriverId)
                   : undefined
               }
+              className={detailTab === "details" ? undefined : "hidden lg:block"}
             />
+
+            <section
+              id="trip-map-panel"
+              role="tabpanel"
+              aria-labelledby="trip-map-tab"
+              className={cn(
+                "min-h-0 min-w-0 flex-1 flex-col bg-surface lg:col-start-2 lg:row-start-2",
+                detailTab === "map"
+                  ? "flex"
+                  : detailTab === "details"
+                    ? "hidden lg:flex"
+                    : "hidden",
+              )}
+            >
+              <div className="flex min-h-14 items-center justify-between gap-4 border-b border-border px-4">
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold">
+                    {selectedTrip
+                      ? formatTripRoute(selectedTrip)
+                      : "Live trip map"}
+                  </h2>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPinIcon size={13} weight="duotone" />
+                    {selectedTrip?.latestPosition
+                      ? "Showing latest reported position"
+                      : "Showing pickup and drop-off locations"}
+                  </p>
+                </div>
+              </div>
+              <div className="relative min-h-0 min-w-0 flex-1">
+                <OperationsMap
+                  trip={selectedTrip}
+                  visible={detailTab === "map"}
+                />
+              </div>
+            </section>
+
+            <div
+              id="trip-locations-panel"
+              role="tabpanel"
+              aria-labelledby="trip-locations-tab"
+              className={cn(
+                "min-h-0 flex-1 flex-col lg:col-start-2 lg:row-start-2",
+                detailTab === "locations" ? "flex" : "hidden",
+              )}
+            >
+              <LocationPingLog
+                positions={positionLog}
+                loading={positionsLoading}
+                error={positionsError}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 justify-center overflow-y-auto bg-background p-4 sm:p-6 lg:p-8">

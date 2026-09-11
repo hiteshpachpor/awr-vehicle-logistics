@@ -145,7 +145,13 @@ async function fetchDrivingRoute(
   return coordinates?.length ? coordinates : null;
 }
 
-export function OperationsMap({ trip }: { trip: TripView | null }) {
+export function OperationsMap({
+  trip,
+  visible = true,
+}: {
+  trip: TripView | null;
+  visible?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -155,40 +161,90 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
   useEffect(() => {
-    if (!containerRef.current || !token) return;
+    const container = containerRef.current;
+    if (!container || !token) return;
 
     mapboxgl.accessToken = token;
-    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style: dark
-        ? "mapbox://styles/mapbox/dark-v11"
-        : "mapbox://styles/mapbox/light-v11",
-      center: [55.32, 25.25],
-      zoom: 9.5,
-      attributionControl: true,
-    });
-    map.addControl(
-      new mapboxgl.NavigationControl({ showCompass: false }),
-      "top-right",
-    );
-    map.on("load", () => setReady(true));
-    map.on("error", (event) => {
-      console.error("Mapbox error:", event.error);
-      setMapError(
-        event.error?.message ??
-          "The map could not be loaded. Trip details remain available.",
+    let map: mapboxgl.Map | null = null;
+    let lastWidth = 0;
+    let lastHeight = 0;
+
+    const createMap = () => {
+      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const instance = new mapboxgl.Map({
+        container,
+        style: dark
+          ? "mapbox://styles/mapbox/dark-v11"
+          : "mapbox://styles/mapbox/light-v11",
+        center: [55.32, 25.25],
+        zoom: 9.5,
+        attributionControl: true,
+      });
+      instance.addControl(
+        new mapboxgl.NavigationControl({ showCompass: false }),
+        "top-right",
       );
+      instance.on("load", () => setReady(true));
+      instance.on("error", (event) => {
+        console.error("Mapbox error:", event.error);
+        setMapError(
+          event.error?.message ??
+            "The map could not be loaded. Trip details remain available.",
+        );
+      });
+      mapRef.current = instance;
+      map = instance;
+    };
+
+    const syncSize = (width: number, height: number) => {
+      if (width < 2 || height < 2) return;
+      if (!map) {
+        lastWidth = width;
+        lastHeight = height;
+        createMap();
+        return;
+      }
+      if (width === lastWidth && height === lastHeight) return;
+      lastWidth = width;
+      lastHeight = height;
+      map.resize();
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      syncSize(rect.width, rect.height);
     });
-    mapRef.current = map;
+    observer.observe(container);
+    syncSize(container.clientWidth, container.clientHeight);
 
     return () => {
+      observer.disconnect();
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       mapRef.current = null;
-      map.remove();
+      setReady(false);
+      map?.remove();
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!visible || !ready) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        map.resize();
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [ready, visible]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -306,7 +362,7 @@ export function OperationsMap({ trip }: { trip: TripView | null }) {
   }
 
   return (
-    <div className="relative h-full min-h-72 bg-surface-strong">
+    <div className="relative h-full min-h-0 min-w-0 w-full bg-surface-strong">
       <div ref={containerRef} className="h-full w-full" />
       {!trip ? (
         <EmptyState
