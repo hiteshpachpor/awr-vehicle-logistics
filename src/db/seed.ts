@@ -174,6 +174,194 @@ export const seededDrivers = driverNames.map((name, index) => ({
   externalReference: `DRV-${String(index + 1).padStart(3, "0")}`,
 }));
 
+const tripRoutes = [
+  {
+    pickupAddress: "AWR Showroom, Sheikh Zayed Road, Dubai",
+    pickupLatitude: 25.1774,
+    pickupLongitude: 55.2407,
+    dropoffAddress: "Al Zahia, Sharjah",
+    dropoffLatitude: 25.3188,
+    dropoffLongitude: 55.4581,
+  },
+  {
+    pickupAddress: "Dubai Mall, Downtown Dubai",
+    pickupLatitude: 25.1972,
+    pickupLongitude: 55.2794,
+    dropoffAddress: "Corniche Road, Abu Dhabi",
+    dropoffLatitude: 24.4764,
+    dropoffLongitude: 54.321,
+  },
+  {
+    pickupAddress: "Al Ain Oasis, Al Ain",
+    pickupLatitude: 24.2075,
+    pickupLongitude: 55.7447,
+    dropoffAddress: "Dubai Marina Walk, Dubai",
+    dropoffLatitude: 25.0805,
+    dropoffLongitude: 55.1403,
+  },
+  {
+    pickupAddress: "City Centre Sharjah",
+    pickupLatitude: 25.3238,
+    pickupLongitude: 55.3928,
+    dropoffAddress: "Al Hamra Village, Ras Al Khaimah",
+    dropoffLatitude: 25.6842,
+    dropoffLongitude: 55.7781,
+  },
+  {
+    pickupAddress: "Ajman Corniche",
+    pickupLatitude: 25.4111,
+    pickupLongitude: 55.4352,
+    dropoffAddress: "Fujairah Port",
+    dropoffLatitude: 25.1356,
+    dropoffLongitude: 56.358,
+  },
+  {
+    pickupAddress: "Palm Jumeirah, Dubai",
+    pickupLatitude: 25.1124,
+    pickupLongitude: 55.139,
+    dropoffAddress: "Expo City Dubai",
+    dropoffLatitude: 24.963,
+    dropoffLongitude: 55.1482,
+  },
+  {
+    pickupAddress: "Yas Island, Abu Dhabi",
+    pickupLatitude: 24.4957,
+    pickupLongitude: 54.6073,
+    dropoffAddress: "Burj Khalifa Boulevard, Dubai",
+    dropoffLatitude: 25.197,
+    dropoffLongitude: 55.2744,
+  },
+  {
+    pickupAddress: "Al Quoz Industrial Area, Dubai",
+    pickupLatitude: 25.1388,
+    pickupLongitude: 55.2285,
+    dropoffAddress: "Jebel Ali Port, Dubai",
+    dropoffLatitude: 24.9857,
+    dropoffLongitude: 55.0273,
+  },
+  {
+    pickupAddress: "Motor City, Dubai",
+    pickupLatitude: 25.0456,
+    pickupLongitude: 55.2378,
+    dropoffAddress: "Al Nahda, Sharjah",
+    dropoffLatitude: 25.3053,
+    dropoffLongitude: 55.3789,
+  },
+  {
+    pickupAddress: "Khalifa City, Abu Dhabi",
+    pickupLatitude: 24.4195,
+    pickupLongitude: 54.5781,
+    dropoffAddress: "Dubai International Airport",
+    dropoffLatitude: 25.2532,
+    dropoffLongitude: 55.3657,
+  },
+  {
+    pickupAddress: "Dubai Investment Park",
+    pickupLatitude: 24.9772,
+    pickupLongitude: 55.1624,
+    dropoffAddress: "Mussafah, Abu Dhabi",
+    dropoffLatitude: 24.3635,
+    dropoffLongitude: 54.516,
+  },
+  {
+    pickupAddress: "Al Barsha, Dubai",
+    pickupLatitude: 25.1112,
+    pickupLongitude: 55.2033,
+    dropoffAddress: "Umm Al Quwain Corniche",
+    dropoffLatitude: 25.5647,
+    dropoffLongitude: 55.5552,
+  },
+  {
+    pickupAddress: "Business Bay, Dubai",
+    pickupLatitude: 25.185,
+    pickupLongitude: 55.2655,
+    dropoffAddress: "Al Ain Mall, Al Ain",
+    dropoffLatitude: 24.2165,
+    dropoffLongitude: 55.7811,
+  },
+  {
+    pickupAddress: "Deira City Centre, Dubai",
+    pickupLatitude: 25.2522,
+    pickupLongitude: 55.3326,
+    dropoffAddress: "Kalba Corniche, Sharjah",
+    dropoffLatitude: 25.0693,
+    dropoffLongitude: 56.3553,
+  },
+  {
+    pickupAddress: "Dubai Silicon Oasis",
+    pickupLatitude: 25.1209,
+    pickupLongitude: 55.3773,
+    dropoffAddress: "Dubai Creek Harbour",
+    dropoffLatitude: 25.2038,
+    dropoffLongitude: 55.3456,
+  },
+  {
+    pickupAddress: "Al Reem Island, Abu Dhabi",
+    pickupLatitude: 24.4986,
+    pickupLongitude: 54.407,
+    dropoffAddress: "Saadiyat Island, Abu Dhabi",
+    dropoffLatitude: 24.5415,
+    dropoffLongitude: 54.436,
+  },
+  {
+    pickupAddress: "Jumeirah Lakes Towers, Dubai",
+    pickupLatitude: 25.0693,
+    pickupLongitude: 55.1417,
+    dropoffAddress: "Mirdif City Centre, Dubai",
+    dropoffLatitude: 25.2194,
+    dropoffLongitude: 55.4194,
+  },
+  {
+    pickupAddress: "Ras Al Khaimah International Airport",
+    pickupLatitude: 25.6134,
+    pickupLongitude: 55.9388,
+    dropoffAddress: "Dubai South",
+    dropoffLatitude: 24.888,
+    dropoffLongitude: 55.1614,
+  },
+  {
+    pickupAddress: "Hatta, Dubai",
+    pickupLatitude: 24.7969,
+    pickupLongitude: 56.1269,
+    dropoffAddress: "Al Faqa, Abu Dhabi",
+    dropoffLatitude: 24.7167,
+    dropoffLongitude: 55.6167,
+  },
+  {
+    pickupAddress: "Al Khan, Sharjah",
+    pickupLatitude: 25.3311,
+    pickupLongitude: 55.3683,
+    dropoffAddress: "Dubai Hills Estate",
+    dropoffLatitude: 25.1098,
+    dropoffLongitude: 55.2448,
+  },
+] as const;
+
+export const SEED_TRIP_SCHEDULE_OFFSET_MS = 5 * 60 * 1_000;
+export const SEED_TRIP_SCHEDULE_SLOT_MS = 71 * 60 * 1_000;
+
+export function buildSeededTrips(seedTime = new Date()) {
+  return tripRoutes.map((route, index) => {
+    const driver = seededDrivers[index % seededDrivers.length]!;
+    const vehicle = seededVehicles[index]!;
+
+    return {
+      id: index === 0 ? seedIds.trip : deterministicId("8500", index + 1),
+      referenceNumber: `TRIP-DEMO-${String(index + 1).padStart(3, "0")}`,
+      vehicleId: vehicle.id,
+      vendorId: driver.vendorId,
+      driverId: driver.id,
+      status: "created" as const,
+      ...route,
+      scheduledAt: new Date(
+        seedTime.getTime() +
+          SEED_TRIP_SCHEDULE_OFFSET_MS +
+          index * SEED_TRIP_SCHEDULE_SLOT_MS,
+      ),
+    };
+  });
+}
+
 export function shouldResetDatabase(args: string[]) {
   return args.includes("--reset-db");
 }
@@ -191,7 +379,7 @@ export async function resetDatabase(db: Database) {
   `);
 }
 
-export async function seedDatabase(db: Database) {
+export async function seedDatabase(db: Database, seedTime = new Date()) {
   await db
     .insert(customers)
     .values(seededCustomers)
@@ -214,20 +402,7 @@ export async function seedDatabase(db: Database) {
 
   await db
     .insert(trips)
-    .values({
-      id: seedIds.trip,
-      referenceNumber: "TRIP-DEMO-001",
-      vehicleId: seedIds.vehicle,
-      vendorId: seedIds.vendor,
-      driverId: seedIds.driver,
-      status: "created",
-      pickupAddress: "AWR Showroom, Sheikh Zayed Road, Dubai",
-      pickupLatitude: 25.1774,
-      pickupLongitude: 55.2407,
-      dropoffAddress: "Al Zahia, Sharjah",
-      dropoffLatitude: 25.3188,
-      dropoffLongitude: 55.4581,
-    })
+    .values(buildSeededTrips(seedTime))
     .onConflictDoNothing();
 }
 

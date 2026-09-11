@@ -65,7 +65,7 @@ describe("database schema", () => {
     expect(vehicleCount[0]?.count).toBe(30);
     expect(vendorCount[0]?.count).toBe(5);
     expect(driverCount[0]?.count).toBe(10);
-    expect(tripCount[0]?.count).toBe(1);
+    expect(tripCount[0]?.count).toBe(20);
   });
 
   it("allows only one active trip per vehicle", async () => {
@@ -107,9 +107,9 @@ describe("database schema", () => {
   });
 
   it("allows multiple scheduled trips but only one in-transit trip per driver", async () => {
-    const otherVehicle = seededVehicles[1]!;
-    const inTransitVehicle = seededVehicles[3]!;
-    const secondInTransitVehicle = seededVehicles[4]!;
+    const otherVehicle = seededVehicles[20]!;
+    const inTransitVehicle = seededVehicles[21]!;
+    const secondInTransitVehicle = seededVehicles[22]!;
 
     await expect(
       database.db.insert(trips).values({
@@ -186,7 +186,7 @@ describe("database schema", () => {
       .values({
         id: "00000000-0000-4000-9000-000000000020",
         referenceNumber: "TRIP-UNASSIGNED-1",
-        vehicleId: seededVehicles[2]!.id,
+        vehicleId: seededVehicles[23]!.id,
         vendorId: seedIds.vendor,
         pickupAddress: "Dubai",
         pickupLatitude: 25.2,
