@@ -1,16 +1,16 @@
 # AWR Vehicle Live Tracking
 
-AWR works with logistics vendors who pick up and drop off customer vehicles. Once a trip is on the road, operations needs to see where that vehicle is — not a spreadsheet, a live map.
+AWR works with logistics vendors who pick up and drop off customer vehicles. Once a trip is underway, operations needs a live view of where that vehicle is.
 
-This app is that view. Operations creates a trip, a vendor assigns a driver, and the driver either shares phone GPS or runs a simulated journey along the real driving route. Positions land on a dashboard in real time: list, map, and a log of every ping.
+This app is that dashboard. Operations creates a trip, a vendor assigns a driver, and the driver either shares phone GPS or runs a simulated journey along the driving route. Positions show up in real time on the list, the map, and a log of every ping.
 
-Open [docs/index.md](docs/index.md) for the original brief, what we built beyond it, the technical decisions, and the API.
+More detail lives in [docs/README.md](docs/README.md): the original brief, extras we added, technical decisions, and the API.
 
 ## Setup and installation
 
-You need **Docker with Docker Compose**, or **Node.js 22+ and PostgreSQL 17+**.
+You need Docker with Docker Compose, or Node.js 22+ and PostgreSQL 17+.
 
-Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token. Without it the APIs still run; the map and driving-route simulator fall back to a straight line.
+Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token. The APIs still run without it. The map and the driving-route simulator then fall back to a straight line between pickup and drop-off.
 
 ### Docker
 
@@ -18,9 +18,9 @@ Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL
 docker compose up --build
 ```
 
-That starts PostgreSQL, waits until it is healthy, applies migrations, loads the demo dataset, and serves the app at [http://localhost:3000](http://localhost:3000).
+PostgreSQL starts, the app waits until it is healthy, migrations run, demo data loads, and the app is at [http://localhost:3000](http://localhost:3000).
 
-For hot reload while you edit `src`:
+Hot reload while you edit `src`:
 
 ```bash
 npm run docker:dev
@@ -45,17 +45,17 @@ To empty the tables, reset identity sequences, and reload the same dataset:
 npm run db:seed -- --reset-db
 ```
 
-That flag is destructive. Drizzle’s migration history is left alone so applied migrations are not rerun.
+That flag deletes application data. Drizzle’s migration history stays in place so applied migrations are not rerun.
 
 ### Sign in
 
 Open `/` and use the password `password`.
 
-- **Operations** — create trips, assign work, cancel a trip that has not finished.
-- **Vendor controller** — assign drivers for that vendor.
-- **Driver** — start, simulate, or end an assigned trip. Simulated trips follow the mapped route; live trips share browser geolocation.
+- **Operations:** create trips, assign work, cancel a trip that has not finished.
+- **Vendor controller:** assign drivers for that vendor.
+- **Driver:** start, simulate, or end an assigned trip. Simulated trips follow the mapped route. Live trips share browser geolocation.
 
-The session is stored in the browser. APIs are unauthenticated on purpose.
+The session is stored in the browser. APIs have no authentication.
 
 The seed is 30 fictional UAE vehicle owners (one vehicle each), five logistics vendors, ten drivers, and one ready-to-start trip. Makes are Nissan 12, INFINITI 7, Renault 5, Chery 4, and Zeekr 2.
 
@@ -71,7 +71,7 @@ Trip:     00000000-0000-4000-8000-000000000005
 
 ## Architecture and stack
 
-The app is a long-lived Next.js Node process. PostgreSQL is the source of truth for trips and positions. Location writes do not talk to dashboards directly; they notify the database, and SSE clients listen.
+The app runs as a long-lived Next.js Node process. PostgreSQL stores trips and positions. A location write does not talk to dashboards directly. It notifies the database, and SSE clients listen.
 
 ```text
 Driver → location API → trip_positions → PostgreSQL NOTIFY
@@ -81,7 +81,7 @@ Dashboard ← SSE endpoint ← PostgreSQL LISTEN + database replay
 
 Notifications are lightweight and not durable. Position rows are. If an SSE client reconnects with `Last-Event-ID`, missed points are replayed from PostgreSQL.
 
-The stack around that is Drizzle for the schema, Zod at the HTTP edge, Mapbox for the map and driving directions, and Vitest for tests.
+Drizzle handles the schema, Zod validates HTTP input, Mapbox draws the map and driving directions, and Vitest runs the tests.
 
 ## Testing
 

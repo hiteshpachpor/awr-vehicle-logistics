@@ -1,8 +1,8 @@
 # API
 
-These are the HTTP endpoints the app uses. There is no authentication on them; the demo session only lives in the browser.
+HTTP endpoints the app uses. There is no authentication on them. The demo session only lives in the browser.
 
-Unless noted, JSON request bodies are validated with Zod. Errors come back as `{ "error": { "code", "message", "details?" } }`.
+JSON request bodies are validated with Zod unless a section says otherwise. Errors look like `{ "error": { "code", "message", "details?" } }`.
 
 ## Lookups
 
@@ -81,7 +81,7 @@ POST /api/trips/:id/location
 }
 ```
 
-`eventId` is optional and is unique per trip. Device time is stored as `recorded_at`; the time the server accepted the POST is `received_at`.
+`eventId` is optional and unique per trip. Device time is stored as `recorded_at`. The time the server accepted the POST is `received_at`.
 
 The driver workspace queues GPS pings while offline and POSTs them later with the original device `timestamp` and a stable `eventId`.
 
@@ -103,8 +103,8 @@ POST   /api/trips/:id/simulation
 DELETE /api/trips/:id/simulation
 ```
 
-`POST` starts a scheduled trip and walks the same Mapbox driving route shown on the map. The body may include `intervalMs` (1,000–60,000) and `stepMeters` (100–20,000). Defaults are a ping every 5 seconds, advancing 1 km.
+`POST` starts a scheduled trip and follows the same Mapbox driving route shown on the map. The body may include `intervalMs` (1,000–60,000) and `stepMeters` (100–20,000). Defaults are a ping every 5 seconds, advancing 1 km.
 
-It posts one GPS ping immediately at pickup, then one at each interval, through the same ingestion path as vendor traffic. Speed is derived from those two values (3 km every 10 seconds is 1,080 km/h). After the last drop-off ping, it waits one more interval and completes the trip. If Mapbox directions are unavailable, it falls back to a straight line between pickup and drop-off.
+It posts one GPS ping immediately at pickup, then one at each interval, through the same ingestion path as vendor traffic. Speed comes from those two values (3 km every 10 seconds is 1,080 km/h). After the last drop-off ping, it waits one more interval and completes the trip. If Mapbox directions are unavailable, it uses a straight line between pickup and drop-off.
 
 `GET` reports whether a simulation is running. `DELETE` stops the current run without completing the trip.
