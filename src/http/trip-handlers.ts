@@ -113,10 +113,10 @@ export async function startSimulationHandler(
   try {
     const tripId = idSchema.parse(id);
     const text = await request.text();
-    if (text.trim()) {
-      simulationRequestSchema.parse(JSON.parse(text));
-    }
-    const simulation = await container.simulatorService.start(tripId);
+    const input = text.trim()
+      ? simulationRequestSchema.parse(JSON.parse(text))
+      : {};
+    const simulation = await container.simulatorService.start(tripId, input);
     const trip = await container.tripService.get(tripId);
     return NextResponse.json(
       { data: simulation, trip },
@@ -135,11 +135,7 @@ export async function getSimulationHandler(
     const tripId = idSchema.parse(id);
     await container.tripService.get(tripId);
     return NextResponse.json({
-      data: {
-        status: container.simulatorService.isRunning(tripId)
-          ? "running"
-          : "idle",
-      },
+      data: container.simulatorService.getStatus(tripId),
     });
   } catch (error) {
     return errorResponse(error);

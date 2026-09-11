@@ -1,16 +1,25 @@
 import { randomUUID } from "node:crypto";
+import type { SimulationRequest } from "@/domain/contracts";
 import { ConflictError } from "@/domain/errors";
 import { fetchDrivingRoute } from "@/lib/mapbox-route";
 import {
   sampleRoute,
   type LatLng,
 } from "@/lib/route-geometry";
+import {
+  SIMULATION_INTERVAL_MS,
+  SIMULATION_STEP_METERS,
+  simulationSpeedKmh,
+} from "@/lib/simulation";
 import type { LocationService } from "./location-service";
 import type { TripService } from "./trip-service";
 
-export const SIMULATION_INTERVAL_MS = 5_000;
-export const SIMULATION_STEP_METERS = 1_000;
-export const SIMULATION_SPEED_KMH = 720;
+export {
+  SIMULATION_INTERVAL_MS,
+  SIMULATION_STEP_METERS,
+  SIMULATION_SPEED_KMH,
+  simulationSpeedKmh,
+} from "@/lib/simulation";
 
 export type FetchSimulationRoute = (
   from: LatLng,
@@ -22,7 +31,18 @@ type Simulation = {
   sessionId: string;
   nextPoint: number;
   route: LatLng[];
+  intervalMs: number;
+  stepMeters: number;
 };
+
+export type SimulationStatus =
+  | { status: "idle" }
+  | {
+      status: "running";
+      intervalMs: number;
+      stepMeters: number;
+      speedKmh: number;
+    };
 
 export async function fetchMapboxSimulationRoute(
   from: LatLng,
@@ -56,13 +76,16 @@ export class SimulatorService {
     private readonly fetchRoute: FetchSimulationRoute = fetchMapboxSimulationRoute,
   ) {}
 
-  async start(tripId: string) {
+  async start(tripId: string, options: SimulationRequest = {}) {
     if (this.simulations.has(tripId)) {
       throw new ConflictError(
         "A simulation is already running for this trip",
         "SIMULATION_ALREADY_RUNNING",
       );
     }
+
+    const intervalMs = options.intervalMs ?? SIMULATION_INTERVAL_MS;
+    const stepMeters = options.stepMeters ?? SIMULATION_STEP_METERS;
 
     const trip = await this.trips.get(tripId);
     if (trip.trip.status !== "created" && trip.trip.status !== "in_transit") {
@@ -81,7 +104,7 @@ export class SimulatorService {
       lng: trip.trip.dropoffLongitude,
     };
     const path = await this.resolvePath(pickup, dropoff);
-    const route = sampleRoute(path, SIMULATION_STEP_METERS);
+    const route = sampleRoute(path, stepMeters);
 
     if (trip.trip.status === "created") {
       await this.trips.transition(tripId, "in_transit");
@@ -92,9 +115,11 @@ export class SimulatorService {
       sessionId,
       nextPoint: 0,
       route,
+      intervalMs,
+      stepMeters,
       timer: setInterval(() => {
         void this.tick(tripId).catch(() => this.stop(tripId));
-      }, SIMULATION_INTERVAL_MS),
+      }, intervalMs),
     };
     this.simulations.set(tripId, simulation);
     try {
@@ -107,7 +132,9 @@ export class SimulatorService {
     return {
       tripId,
       sessionId,
-      intervalMs: SIMULATION_INTERVAL_MS,
+      intervalMs,
+      stepMeters,
+      speedKmh: simulationSpeedKmh(stepMeters, intervalMs),
       status: "running" as const,
     };
   }
@@ -124,6 +151,22 @@ export class SimulatorService {
 
   isRunning(tripId: string) {
     return this.simulations.has(tripId);
+  }
+
+  getStatus(tripId: string): SimulationStatus {
+    const simulation = this.simulations.get(tripId);
+    if (!simulation) {
+      return { status: "idle" };
+    }
+    return {
+      status: "running",
+      intervalMs: simulation.intervalMs,
+      stepMeters: simulation.stepMeters,
+      speedKmh: simulationSpeedKmh(
+        simulation.stepMeters,
+        simulation.intervalMs,
+      ),
+    };
   }
 
   private async resolvePath(pickup: LatLng, dropoff: LatLng) {
@@ -156,7 +199,10 @@ export class SimulatorService {
         lat: point.lat,
         lng: point.lng,
         timestamp: this.now().toISOString(),
-        speed: SIMULATION_SPEED_KMH,
+        speed: simulationSpeedKmh(
+          simulation.stepMeters,
+          simulation.intervalMs,
+        ),
         eventId: `${simulation.sessionId}-${simulation.nextPoint}`,
       },
       "simulator",

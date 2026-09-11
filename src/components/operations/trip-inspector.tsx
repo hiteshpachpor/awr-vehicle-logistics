@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -27,7 +28,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FormField } from "@/components/ui/form-field";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { Input } from "@/components/ui/input";
 import type { DriverLocationStatus } from "@/hooks/use-driver-location";
 import type { StreamStatus } from "@/hooks/use-trip-events";
 import type { DriverOption, TripStatus, TripView } from "@/lib/operations-types";
@@ -39,6 +42,15 @@ import {
   formatRelativeTime,
   formatSpeed,
 } from "@/lib/operations-ui";
+import {
+  formatSimulationPace,
+  parseSimulationForm,
+  SIMULATION_INTERVAL_SECONDS_MAX,
+  SIMULATION_INTERVAL_SECONDS_MIN,
+  SIMULATION_STEP_KM_MAX,
+  SIMULATION_STEP_KM_MIN,
+  type SimulationPace,
+} from "@/lib/simulation";
 import { cn } from "@/lib/utils";
 import { DriverAssignment } from "./driver-assignment";
 import { TripStatusBadge } from "./trip-status-badge";
@@ -127,6 +139,7 @@ export function TripInspector({
   onTransition,
   onSimulate,
   simulating = false,
+  simulationPace = null,
   focused,
   drivers,
   assigningTripId,
@@ -142,8 +155,9 @@ export function TripInspector({
   locationStatus: DriverLocationStatus;
   locationError: string | null;
   onTransition: (status: TripStatus) => void;
-  onSimulate?: () => void;
+  onSimulate?: (pace: SimulationPace) => void;
   simulating?: boolean;
+  simulationPace?: SimulationPace | null;
   focused?: boolean;
   drivers?: DriverOption[];
   assigningTripId?: string | null;
@@ -211,30 +225,10 @@ export function TripInspector({
                 </Button>
               ) : null}
               {actions.includes("simulate") && onSimulate ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="secondary" disabled={mutating}>
-                      <PathIcon />
-                      Simulate trip
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Simulate this trip?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This starts the trip and moves a simulated vehicle along
-                        the mapped route at 1 km every 5 seconds. Real location
-                        sharing will not be used.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep trip scheduled</AlertDialogCancel>
-                      <AlertDialogAction onClick={onSimulate}>
-                        Simulate trip
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <SimulateTripDialog
+                  mutating={mutating}
+                  onSimulate={onSimulate}
+                />
               ) : null}
               {actions.includes("complete") ? (
                 <AlertDialog>
@@ -422,8 +416,9 @@ export function TripInspector({
                 <>
                   <p className="font-semibold">Simulating live location</p>
                   <p className="mt-1 text-xs leading-5">
-                    A simulated vehicle is moving along the mapped route at 1 km
-                    every 5 seconds.
+                    {simulationPace
+                      ? `A simulated vehicle is moving along the mapped route at ${formatSimulationPace(simulationPace)}.`
+                      : "A simulated vehicle is moving along the mapped route."}
                   </p>
                 </>
               ) : (
@@ -447,6 +442,135 @@ export function TripInspector({
 
       </div>
     </aside>
+  );
+}
+
+function SimulateTripDialog({
+  mutating,
+  onSimulate,
+}: {
+  mutating: boolean;
+  onSimulate: (pace: SimulationPace) => void;
+}) {
+  const [intervalSeconds, setIntervalSeconds] = useState("5");
+  const [stepKm, setStepKm] = useState("1");
+  const pace = parseSimulationForm(intervalSeconds, stepKm);
+
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (open) {
+          setIntervalSeconds("5");
+          setStepKm("1");
+        }
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button variant="secondary" disabled={mutating}>
+          <PathIcon />
+          Simulate trip
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Simulate this trip?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This starts the trip and moves a simulated vehicle along the mapped
+            route. Real location sharing will not be used.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <FormField
+            label="Update interval"
+            htmlFor="simulation-interval-seconds"
+            helper={`${SIMULATION_INTERVAL_SECONDS_MIN} to ${SIMULATION_INTERVAL_SECONDS_MAX}`}
+          >
+            <NumberFieldWithUnit
+              id="simulation-interval-seconds"
+              unit="seconds"
+              type="number"
+              min={SIMULATION_INTERVAL_SECONDS_MIN}
+              max={SIMULATION_INTERVAL_SECONDS_MAX}
+              step={1}
+              inputMode="numeric"
+              aria-describedby="simulation-interval-seconds-description"
+              value={intervalSeconds}
+              onChange={(event) => setIntervalSeconds(event.target.value)}
+            />
+          </FormField>
+          <FormField
+            label="Distance per update"
+            htmlFor="simulation-step-km"
+            helper={`${SIMULATION_STEP_KM_MIN} to ${SIMULATION_STEP_KM_MAX}`}
+          >
+            <NumberFieldWithUnit
+              id="simulation-step-km"
+              unit="km"
+              type="number"
+              min={SIMULATION_STEP_KM_MIN}
+              max={SIMULATION_STEP_KM_MAX}
+              step={0.1}
+              inputMode="decimal"
+              aria-describedby="simulation-step-km-description"
+              value={stepKm}
+              onChange={(event) => setStepKm(event.target.value)}
+            />
+          </FormField>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          {pace
+            ? `The simulated vehicle will travel ${formatSimulationPace(pace)}.`
+            : "Enter an interval from 1 to 60 seconds and a distance from 0.1 to 20 km."}
+        </p>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep trip scheduled</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!pace}
+            onClick={(event) => {
+              if (!pace) {
+                event.preventDefault();
+                return;
+              }
+              onSimulate(pace);
+            }}
+          >
+            Simulate trip
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function NumberFieldWithUnit({
+  unit,
+  className,
+  id,
+  "aria-describedby": describedBy,
+  ...props
+}: React.ComponentPropsWithoutRef<"input"> & { unit: string }) {
+  const unitId = id ? `${id}-unit` : undefined;
+
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        aria-describedby={
+          [describedBy, unitId].filter(Boolean).join(" ") || undefined
+        }
+        className={cn(
+          "bg-surface pr-[4.75rem] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+          className,
+        )}
+        {...props}
+      />
+      <span
+        id={unitId}
+        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground"
+      >
+        {unit}
+      </span>
+    </div>
   );
 }
 

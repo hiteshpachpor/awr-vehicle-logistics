@@ -30,4 +30,28 @@ describe("API contracts", () => {
   it("accepts an empty simulator request body", () => {
     expect(simulationRequestSchema.parse({})).toEqual({});
   });
+
+  it("accepts a simulator interval and step", () => {
+    expect(
+      simulationRequestSchema.parse({
+        intervalMs: 10_000,
+        stepMeters: 3_000,
+      }),
+    ).toEqual({
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+    });
+  });
+
+  it("rejects simulator values outside the allowed range", () => {
+    expect(
+      simulationRequestSchema.safeParse({ intervalMs: 250 }).success,
+    ).toBe(false);
+    expect(
+      simulationRequestSchema.safeParse({ stepMeters: 50 }).success,
+    ).toBe(false);
+    expect(
+      simulationRequestSchema.safeParse({ intervalMs: 61_000 }).success,
+    ).toBe(false);
+  });
 });

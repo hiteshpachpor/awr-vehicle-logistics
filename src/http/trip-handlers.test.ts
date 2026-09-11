@@ -26,7 +26,12 @@ function container(overrides: Partial<AppContainer> = {}) {
     },
     positionRepository: { listRecent: vi.fn() },
     locationService: { ingest: vi.fn() },
-    simulatorService: { start: vi.fn(), stop: vi.fn(), isRunning: vi.fn() },
+    simulatorService: {
+      start: vi.fn(),
+      stop: vi.fn(),
+      isRunning: vi.fn(),
+      getStatus: vi.fn(),
+    },
     ...overrides,
   } as unknown as AppContainer;
 }
@@ -236,6 +241,8 @@ describe("trip HTTP handlers", () => {
       tripId,
       sessionId: "session",
       intervalMs: 5_000,
+      stepMeters: 1_000,
+      speedKmh: 720,
       status: "running",
     });
     vi.mocked(app.tripService.get).mockResolvedValue({
@@ -255,8 +262,38 @@ describe("trip HTTP handlers", () => {
 
     expect(started.status).toBe(201);
     expect(stopped.status).toBe(204);
-    expect(app.simulatorService.start).toHaveBeenCalledWith(tripId);
+    expect(app.simulatorService.start).toHaveBeenCalledWith(tripId, {});
     expect(app.tripService.get).toHaveBeenCalledWith(tripId);
+  });
+
+  it("forwards simulation pace to the simulator", async () => {
+    const app = container();
+    vi.mocked(app.simulatorService.start).mockResolvedValue({
+      tripId,
+      sessionId: "session",
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+      speedKmh: 1_080,
+      status: "running",
+    });
+    vi.mocked(app.tripService.get).mockResolvedValue({
+      trip: { id: tripId },
+    } as never);
+    const request = new Request(
+      `http://localhost/api/trips/${tripId}/simulation`,
+      {
+        method: "POST",
+        body: JSON.stringify({ intervalMs: 10_000, stepMeters: 3_000 }),
+      },
+    );
+
+    const response = await startSimulationHandler(tripId, request, app);
+
+    expect(response.status).toBe(201);
+    expect(app.simulatorService.start).toHaveBeenCalledWith(tripId, {
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+    });
   });
 
   it("reports whether a simulation is running", async () => {
@@ -264,13 +301,23 @@ describe("trip HTTP handlers", () => {
     vi.mocked(app.tripService.get).mockResolvedValue({
       trip: { id: tripId },
     } as never);
-    vi.mocked(app.simulatorService.isRunning).mockReturnValue(true);
+    vi.mocked(app.simulatorService.getStatus).mockReturnValue({
+      status: "running",
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+      speedKmh: 1_080,
+    });
 
     const response = await getSimulationHandler(tripId, app);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      data: { status: "running" },
+      data: {
+        status: "running",
+        intervalMs: 10_000,
+        stepMeters: 3_000,
+        speedKmh: 1_080,
+      },
     });
   });
 });

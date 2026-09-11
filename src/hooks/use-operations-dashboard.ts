@@ -14,6 +14,7 @@ import type {
   TripView,
 } from "@/lib/operations-types";
 import { getApiErrorMessage, matchesTrip } from "@/lib/operations-ui";
+import type { SimulationPace } from "@/lib/simulation";
 
 export type OperationsNotice = {
   type: "success" | "error";
@@ -60,6 +61,9 @@ export function useOperationsDashboard({
   const [positionsLoading, setPositionsLoading] = useState(focused);
   const [positionsError, setPositionsError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
+  const [simulationPace, setSimulationPace] = useState<SimulationPace | null>(
+    null,
+  );
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
@@ -130,18 +134,29 @@ export function useOperationsDashboard({
             { cache: "no-store" },
           );
           const simulationBody = (await simulationResponse.json()) as
-            | { data: { status: "running" | "idle" } }
+            | { data: SimulationStatusPayload }
             | ApiErrorBody;
-          setSimulating(
+          if (
             simulationResponse.ok &&
-              "data" in simulationBody &&
-              simulationBody.data.status === "running",
-          );
+            "data" in simulationBody &&
+            simulationBody.data.status === "running"
+          ) {
+            setSimulating(true);
+            setSimulationPace({
+              intervalMs: simulationBody.data.intervalMs,
+              stepMeters: simulationBody.data.stepMeters,
+            });
+          } else {
+            setSimulating(false);
+            setSimulationPace(null);
+          }
         } catch {
           setSimulating(false);
+          setSimulationPace(null);
         }
       } else {
         setSimulating(false);
+        setSimulationPace(null);
       }
       setLastRefresh(new Date());
     } catch (error) {
@@ -309,6 +324,7 @@ export function useOperationsDashboard({
       replaceTrip(body as TripView);
       if (status !== "in_transit") {
         setSimulating(false);
+        setSimulationPace(null);
       }
     } catch (error) {
       setMutationError(
@@ -321,7 +337,7 @@ export function useOperationsDashboard({
     }
   }
 
-  async function simulateTrip() {
+  async function simulateTrip(pace: SimulationPace) {
     if (!selectedId) return;
     setMutating(true);
     setMutationError(null);
@@ -329,15 +345,28 @@ export function useOperationsDashboard({
       const response = await fetch(`/api/trips/${selectedId}/simulation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(pace),
       });
       const body = (await response.json()) as
-        | { data: { status: string }; trip: TripView }
+        | {
+            data: {
+              status: string;
+              intervalMs: number;
+              stepMeters: number;
+            };
+            trip: TripView;
+          }
         | ApiErrorBody;
       if (!response.ok) {
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
       setSimulating(true);
+      if ("data" in body) {
+        setSimulationPace({
+          intervalMs: body.data.intervalMs,
+          stepMeters: body.data.stepMeters,
+        });
+      }
       if ("trip" in body) {
         replaceTrip(body.trip);
       }
@@ -428,6 +457,7 @@ export function useOperationsDashboard({
     driverLocation,
     streamStatus,
     simulating: simulationActive,
+    simulationPace,
     counts,
     visibleTrips,
     loadTrips,
@@ -452,3 +482,7 @@ function mergePositions(...groups: Position[][]) {
     )
     .slice(0, 100);
 }
+
+type SimulationStatusPayload =
+  | { status: "idle" }
+  | { status: "running"; intervalMs: number; stepMeters: number };

@@ -4,6 +4,7 @@ import type { TripService, TripView } from "./trip-service";
 import {
   SIMULATION_INTERVAL_MS,
   SIMULATION_SPEED_KMH,
+  SIMULATION_STEP_METERS,
   SimulatorService,
 } from "./simulator-service";
 
@@ -68,7 +69,15 @@ describe("SimulatorService", () => {
       tripId: "trip",
       sessionId: "session",
       intervalMs: SIMULATION_INTERVAL_MS,
+      stepMeters: SIMULATION_STEP_METERS,
+      speedKmh: SIMULATION_SPEED_KMH,
       status: "running",
+    });
+    expect(simulator.getStatus("trip")).toEqual({
+      status: "running",
+      intervalMs: SIMULATION_INTERVAL_MS,
+      stepMeters: SIMULATION_STEP_METERS,
+      speedKmh: SIMULATION_SPEED_KMH,
     });
 
     await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
@@ -85,6 +94,70 @@ describe("SimulatorService", () => {
     expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
     expect(simulator.isRunning("trip")).toBe(false);
     expect(simulator.stop("trip")).toBe(false);
+  });
+
+  it("advances the configured distance on the configured interval", async () => {
+    vi.useFakeTimers();
+    const trips = {
+      get: vi.fn().mockResolvedValue(createdTrip),
+      transition: vi.fn().mockResolvedValue(createdTrip),
+    } as unknown as TripService;
+    const locations = {
+      ingest: vi.fn().mockResolvedValue({}),
+    } as unknown as LocationService;
+    const fetchRoute = vi.fn().mockResolvedValue(shortRoute);
+    const simulator = new SimulatorService(
+      trips,
+      locations,
+      () => new Date("2026-09-10T10:00:00Z"),
+      () => "session",
+      fetchRoute,
+    );
+
+    const result = await simulator.start("trip", {
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+    });
+
+    expect(result).toEqual({
+      tripId: "trip",
+      sessionId: "session",
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+      speedKmh: 1_080,
+      status: "running",
+    });
+    expect(locations.ingest).toHaveBeenCalledWith(
+      "trip",
+      expect.objectContaining({
+        speed: 1_080,
+        eventId: "session-0",
+      }),
+      "simulator",
+    );
+    expect(simulator.getStatus("trip")).toEqual({
+      status: "running",
+      intervalMs: 10_000,
+      stepMeters: 3_000,
+      speedKmh: 1_080,
+    });
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(locations.ingest).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(locations.ingest).toHaveBeenCalledTimes(2);
+    expect(locations.ingest).toHaveBeenLastCalledWith(
+      "trip",
+      expect.objectContaining({
+        lat: shortRoute[1]?.lat,
+        lng: shortRoute[1]?.lng,
+        speed: 1_080,
+      }),
+      "simulator",
+    );
+    expect(simulator.isRunning("trip")).toBe(false);
+    expect(simulator.getStatus("trip")).toEqual({ status: "idle" });
   });
 
   it("falls back to a geodesic line when Mapbox is unavailable", async () => {

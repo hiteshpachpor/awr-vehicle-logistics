@@ -212,13 +212,15 @@ DELETE /api/trips/:id/simulation
 ```
 
 Starting a simulation starts a scheduled trip, then walks the same Mapbox
-driving route shown on the map. It posts one GPS ping immediately at pickup
-and another every 5 seconds, advancing 1 km along the polyline each time,
-through the same ingestion service as vendor traffic. The trip stays in
-transit when the vehicle reaches drop-off so the driver can end it. If Mapbox
-directions are unavailable, the simulator falls back to a straight line
-between pickup and drop-off. Deleting stops the current simulation without
-completing the trip.
+driving route shown on the map. The request body may include `intervalMs`
+(1,000–60,000) and `stepMeters` (100–20,000); omitted values default to a ping
+every 5 seconds advancing 1 km. It posts one GPS ping immediately at pickup and
+another at each interval, through the same ingestion service as vendor traffic.
+The reported speed is derived from those two values (3 km every 10 seconds is
+1,080 km/h). The trip stays in transit when the vehicle reaches drop-off so the
+driver can end it. If Mapbox directions are unavailable, the simulator falls
+back to a straight line between pickup and drop-off. Deleting stops the current
+simulation without completing the trip.
 
 ## Quality checks
 
