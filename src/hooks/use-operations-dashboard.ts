@@ -6,10 +6,16 @@ import { useDemoAuth } from "@/components/auth/demo-auth-provider";
 import { useDriverLocation } from "@/hooks/use-driver-location";
 import { useTripEvents } from "@/hooks/use-trip-events";
 import { canAccessTrip, getSessionHome } from "@/lib/demo-auth";
+import {
+  DriverLocationAccessError,
+  requestDriverLocationAccess,
+  startTripLocationError,
+} from "@/lib/driver-location";
 import type {
   ApiErrorBody,
   DriverOption,
   Position,
+  TripMutationError,
   TripStatus,
   TripView,
 } from "@/lib/operations-types";
@@ -56,7 +62,8 @@ export function useOperationsDashboard({
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
-  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [mutationError, setMutationError] =
+    useState<TripMutationError | null>(null);
   const [positionLog, setPositionLog] = useState<Position[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(focused);
   const [positionsError, setPositionsError] = useState<string | null>(null);
@@ -312,6 +319,9 @@ export function useOperationsDashboard({
     setMutating(true);
     setMutationError(null);
     try {
+      if (status === "in_transit") {
+        await requestDriverLocationAccess();
+      }
       const response = await fetch(`/api/trips/${selectedId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -327,11 +337,17 @@ export function useOperationsDashboard({
         setSimulationPace(null);
       }
     } catch (error) {
-      setMutationError(
-        error instanceof Error
-          ? error.message
-          : "The trip could not be updated.",
-      );
+      if (error instanceof DriverLocationAccessError) {
+        setMutationError(startTripLocationError(error.reason));
+        return;
+      }
+      setMutationError({
+        title: "The trip could not be updated",
+        description:
+          error instanceof Error
+            ? error.message
+            : "The trip could not be updated.",
+      });
     } finally {
       setMutating(false);
     }
@@ -371,11 +387,13 @@ export function useOperationsDashboard({
         replaceTrip(body.trip);
       }
     } catch (error) {
-      setMutationError(
-        error instanceof Error
-          ? error.message
-          : "The trip could not be simulated.",
-      );
+      setMutationError({
+        title: "The trip could not be simulated",
+        description:
+          error instanceof Error
+            ? error.message
+            : "The trip could not be simulated.",
+      });
     } finally {
       setMutating(false);
     }

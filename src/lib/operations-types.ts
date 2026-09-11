@@ -104,3 +104,9 @@ export type GoogleMapsLocation = {
 export type GoogleMapsLocationResponse = {
   data: GoogleMapsLocation;
 };
+
+export type TripMutationError = {
+  title: string;
+  description: string;
+  hint?: string;
+};

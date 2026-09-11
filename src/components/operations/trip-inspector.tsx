@@ -33,7 +33,12 @@ import { InlineAlert } from "@/components/ui/inline-alert";
 import { Input } from "@/components/ui/input";
 import type { DriverLocationStatus } from "@/hooks/use-driver-location";
 import type { StreamStatus } from "@/hooks/use-trip-events";
-import type { DriverOption, TripStatus, TripView } from "@/lib/operations-types";
+import type {
+  DriverOption,
+  TripMutationError,
+  TripStatus,
+  TripView,
+} from "@/lib/operations-types";
 import {
   availableTripActionsForRole,
   formatCoordinates,
@@ -149,7 +154,7 @@ export function TripInspector({
   trip: TripView | null;
   streamStatus: StreamStatus;
   mutating: boolean;
-  mutationError: string | null;
+  mutationError: TripMutationError | null;
   role: "operations" | "controller" | "driver";
   homeHref: string;
   locationStatus: DriverLocationStatus;
@@ -287,8 +292,16 @@ export function TripInspector({
             </div>
 
             {mutationError ? (
-              <InlineAlert className="mt-3 font-medium">
-                {mutationError}
+              <InlineAlert
+                title={mutationError.title}
+                className="mt-3 border-destructive/40 bg-destructive/10 p-4 shadow-[0_6px_18px_rgb(165_29_40/8%)]"
+              >
+                <p>{mutationError.description}</p>
+                {mutationError.hint ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {mutationError.hint}
+                  </p>
+                ) : null}
               </InlineAlert>
             ) : null}
           </DetailGroup>
