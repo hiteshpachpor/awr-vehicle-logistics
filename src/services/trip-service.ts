@@ -16,6 +16,7 @@ import {
   type TripDetails,
 } from "@/repositories/trip-repository";
 import { PositionRepository } from "@/repositories/position-repository";
+import type { TripListPublisher } from "./trip-list-events";
 
 const allowedTransitions: Record<TripStatus, readonly TripStatus[]> = {
   created: ["in_transit", "cancelled"],
@@ -38,6 +39,7 @@ export class TripService {
   constructor(
     private readonly trips: TripRepository,
     private readonly positions: PositionRepository,
+    private readonly listPublisher: TripListPublisher | null = null,
     private readonly now: () => Date = () => new Date(),
     private readonly makeId: () => string = randomUUID,
   ) {}
@@ -61,7 +63,14 @@ export class TripService {
         : undefined,
     });
 
-    return this.get(trip.id);
+    const view = await this.get(trip.id);
+    await this.publishListUpdate({
+      tripId: view.trip.id,
+      vendorId: view.trip.vendorId,
+      type: "created",
+      to: "created",
+    });
+    return view;
   }
 
   async get(id: string): Promise<TripView> {
@@ -127,7 +136,13 @@ export class TripService {
         "CONCURRENT_MODIFICATION",
       );
     }
-    return this.get(id);
+    const view = await this.get(id);
+    await this.publishListUpdate({
+      tripId: view.trip.id,
+      vendorId: view.trip.vendorId,
+      type: "assigned",
+    });
+    return view;
   }
 
   async transition(id: string, status: TripStatus): Promise<TripView> {
@@ -170,7 +185,15 @@ export class TripService {
       );
     }
 
-    return this.get(id);
+    const view = await this.get(id);
+    await this.publishListUpdate({
+      tripId: view.trip.id,
+      vendorId: view.trip.vendorId,
+      type: "status",
+      from: existing.trip.status,
+      to: status,
+    });
+    return view;
   }
 
   async requireInTransit(id: string) {
@@ -184,5 +207,11 @@ export class TripService {
         "TRIP_NOT_IN_TRANSIT",
       );
     }
+  }
+
+  private async publishListUpdate(
+    notification: Parameters<TripListPublisher["publish"]>[0],
+  ) {
+    await this.listPublisher?.publish(notification);
   }
 }

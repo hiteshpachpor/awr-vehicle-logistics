@@ -110,3 +110,12 @@ export type TripMutationError = {
   description: string;
   hint?: string;
 };
+
+export type TripListUpdateType = "created" | "assigned" | "status";
+
+export type TripListUpdate = {
+  type: TripListUpdateType;
+  from?: TripStatus;
+  to?: TripStatus;
+  trip: TripView;
+};

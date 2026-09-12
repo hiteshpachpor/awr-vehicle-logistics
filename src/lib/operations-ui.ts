@@ -93,6 +93,84 @@ export function availableTripActionsForRole(
   });
 }
 
+export function tripCreatedNotice(referenceNumber: string) {
+  return {
+    type: "success" as const,
+    title: "Trip created",
+    description: `${referenceNumber} is ready for driver assignment.`,
+  };
+}
+
+export function tripAssignedNotice(
+  driverName: string,
+  referenceNumber: string,
+) {
+  return {
+    type: "success" as const,
+    title: "Driver assigned",
+    description: `${driverName} will handle ${referenceNumber}.`,
+  };
+}
+
+export function tripListUpdateNotice(update: {
+  type: "created" | "assigned" | "status";
+  to?: TripStatus;
+  trip: TripView;
+}) {
+  if (update.type === "created") {
+    return tripCreatedNotice(update.trip.trip.referenceNumber);
+  }
+  if (update.type === "assigned") {
+    return tripAssignedNotice(
+      update.trip.driver?.name ?? "A driver",
+      update.trip.trip.referenceNumber,
+    );
+  }
+  if (
+    update.to === "in_transit" ||
+    update.to === "completed" ||
+    update.to === "cancelled"
+  ) {
+    return tripTransitionSuccessNotice(update.to, update.trip.trip.referenceNumber);
+  }
+  return null;
+}
+
+export function mergeTripByVersion(
+  trips: TripView[],
+  updated: TripView,
+): { trips: TripView[]; applied: "new" | "newer" | "unchanged" } {
+  const existing = trips.find((trip) => trip.trip.id === updated.trip.id);
+  if (!existing) {
+    return { trips: [updated, ...trips], applied: "new" };
+  }
+  if (updated.trip.version > existing.trip.version) {
+    return {
+      trips: trips.map((trip) =>
+        trip.trip.id === updated.trip.id ? updated : trip,
+      ),
+      applied: "newer",
+    };
+  }
+  return { trips, applied: "unchanged" };
+}
+
+export function mergeTripListByVersion(
+  current: TripView[],
+  incoming: TripView[],
+): TripView[] {
+  const currentById = new Map(
+    current.map((trip) => [trip.trip.id, trip] as const),
+  );
+  const incomingIds = new Set(incoming.map((trip) => trip.trip.id));
+  const extras = current.filter((trip) => !incomingIds.has(trip.trip.id));
+  const merged = incoming.map((trip) => {
+    const local = currentById.get(trip.trip.id);
+    return local && local.trip.version > trip.trip.version ? local : trip;
+  });
+  return extras.length ? [...extras, ...merged] : merged;
+}
+
 export function matchesTrip(trip: TripView, query: string) {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) {

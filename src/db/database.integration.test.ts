@@ -25,6 +25,10 @@ import {
   PostgresPositionEventSource,
   PostgresPositionPublisher,
 } from "@/services/position-events";
+import {
+  PostgresTripListEventSource,
+  PostgresTripListPublisher,
+} from "@/services/trip-list-events";
 
 describe("database schema", () => {
   let container: StartedPostgreSqlContainer;
@@ -353,6 +357,45 @@ describe("database schema", () => {
     await expect(received).resolves.toEqual({
       tripId: "00000000-0000-4000-8000-000000000005",
       positionId: 99,
+    });
+    await eventSource.close();
+  });
+
+  it("delivers trip list notifications through PostgreSQL", async () => {
+    const eventSource = new PostgresTripListEventSource(
+      container.getConnectionUri(),
+    );
+    const publisher = new PostgresTripListPublisher(database.pool);
+    let resolveNotification:
+      | ((value: {
+          tripId: string;
+          vendorId: string;
+          type: string;
+        }) => void)
+      | undefined;
+    const received = new Promise<{
+      tripId: string;
+      vendorId: string;
+      type: string;
+    }>((resolve) => {
+      resolveNotification = resolve;
+    });
+    await eventSource.subscribe((notification) =>
+      resolveNotification?.(notification),
+    );
+
+    await publisher.publish({
+      tripId: "00000000-0000-4000-8000-000000000005",
+      vendorId: "00000000-0000-4000-8000-000000000003",
+      type: "created",
+      to: "created",
+    });
+
+    await expect(received).resolves.toEqual({
+      tripId: "00000000-0000-4000-8000-000000000005",
+      vendorId: "00000000-0000-4000-8000-000000000003",
+      type: "created",
+      to: "created",
     });
     await eventSource.close();
   });

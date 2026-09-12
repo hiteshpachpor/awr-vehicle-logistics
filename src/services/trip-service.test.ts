@@ -7,6 +7,7 @@ import type {
 import type { PositionRepository } from "@/repositories/position-repository";
 import { InvalidStateTransitionError } from "@/domain/errors";
 import { canTransition, TripService } from "./trip-service";
+import type { TripListPublisher } from "./trip-list-events";
 
 function tripDetails(status: Trip["status"] = "created"): TripDetails {
   return {
@@ -194,7 +195,13 @@ describe("TripService", () => {
       latestForTrips: vi.fn().mockResolvedValue(new Map()),
     } as unknown as PositionRepository;
     const now = new Date("2026-09-10T11:00:00Z");
-    const service = new TripService(repository, positions, () => now);
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(
+      repository,
+      positions,
+      { publish } as TripListPublisher,
+      () => now,
+    );
 
     const result = await service.transition(before.trip.id, "in_transit");
 
@@ -205,5 +212,151 @@ describe("TripService", () => {
       now,
     );
     expect(result.trip.status).toBe("in_transit");
+    expect(publish).toHaveBeenCalledWith({
+      tripId: before.trip.id,
+      vendorId: before.trip.vendorId,
+      type: "status",
+      from: "created",
+      to: "in_transit",
+    });
+  });
+
+  it("publishes a list update after completing or cancelling a trip", async () => {
+    const before = tripDetails("in_transit");
+    const completed = tripDetails("completed");
+    const repository = {
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(completed),
+      updateStatus: vi.fn().mockResolvedValue(completed.trip),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn().mockResolvedValue(new Map()),
+    } as unknown as PositionRepository;
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(repository, positions, {
+      publish,
+    } as TripListPublisher);
+
+    await service.transition(before.trip.id, "completed");
+
+    expect(publish).toHaveBeenCalledWith({
+      tripId: before.trip.id,
+      vendorId: before.trip.vendorId,
+      type: "status",
+      from: "in_transit",
+      to: "completed",
+    });
+  });
+
+  it("publishes a list update after cancelling a trip", async () => {
+    const before = tripDetails("created");
+    const cancelled = tripDetails("cancelled");
+    const repository = {
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(cancelled),
+      updateStatus: vi.fn().mockResolvedValue(cancelled.trip),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn().mockResolvedValue(new Map()),
+    } as unknown as PositionRepository;
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(repository, positions, {
+      publish,
+    } as TripListPublisher);
+
+    await service.transition(before.trip.id, "cancelled");
+
+    expect(publish).toHaveBeenCalledWith({
+      tripId: before.trip.id,
+      vendorId: before.trip.vendorId,
+      type: "status",
+      from: "created",
+      to: "cancelled",
+    });
+  });
+
+  it("publishes a list update after creating a trip", async () => {
+    const created = tripDetails("created");
+    const repository = {
+      create: vi.fn().mockResolvedValue(created.trip),
+      findById: vi.fn().mockResolvedValue(created),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn().mockResolvedValue(new Map()),
+    } as unknown as PositionRepository;
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(
+      repository,
+      positions,
+      { publish } as TripListPublisher,
+      () => new Date("2026-09-10T10:00:00Z"),
+    );
+
+    await service.create({
+      vehicleId: created.trip.vehicleId,
+      vendorId: created.trip.vendorId,
+      pickup: { address: "Dubai", lat: 25.2, lng: 55.3 },
+      dropoff: { address: "Sharjah", lat: 25.35, lng: 55.42 },
+    });
+
+    expect(publish).toHaveBeenCalledWith({
+      tripId: created.trip.id,
+      vendorId: created.trip.vendorId,
+      type: "created",
+      to: "created",
+    });
+  });
+
+  it("publishes a list update after assigning a driver", async () => {
+    const before = tripDetails("created");
+    before.trip.driverId = null;
+    before.driver = null;
+    const after = tripDetails("created");
+    const repository = {
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(after),
+      findAssignableDriver: vi.fn().mockResolvedValue({ id: after.driver!.id }),
+      listDriverOccupancy: vi.fn().mockResolvedValue([]),
+      updateDriver: vi.fn().mockResolvedValue(after.trip),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn().mockResolvedValue(new Map()),
+    } as unknown as PositionRepository;
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(repository, positions, {
+      publish,
+    } as TripListPublisher);
+
+    await service.assignDriver(before.trip.id, after.driver!.id);
+
+    expect(publish).toHaveBeenCalledWith({
+      tripId: after.trip.id,
+      vendorId: after.trip.vendorId,
+      type: "assigned",
+    });
+  });
+
+  it("does not publish when a transition is rejected", async () => {
+    const repository = {
+      findById: vi.fn().mockResolvedValue(tripDetails("completed")),
+    } as unknown as TripRepository;
+    const positions = {
+      latestForTrips: vi.fn(),
+    } as unknown as PositionRepository;
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const service = new TripService(repository, positions, {
+      publish,
+    } as TripListPublisher);
+
+    await expect(
+      service.transition("trip", "in_transit"),
+    ).rejects.toBeInstanceOf(InvalidStateTransitionError);
+    expect(publish).not.toHaveBeenCalled();
   });
 });

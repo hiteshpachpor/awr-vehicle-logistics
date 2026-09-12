@@ -10,6 +10,11 @@ import {
   getApiErrorMessage,
   hasActualDropoffMismatch,
   matchesTrip,
+  mergeTripByVersion,
+  mergeTripListByVersion,
+  tripAssignedNotice,
+  tripCreatedNotice,
+  tripListUpdateNotice,
   tripTransitionFailureNotice,
   tripTransitionSuccessNotice,
 } from "./operations-ui";
@@ -154,5 +159,71 @@ describe("operations UI helpers", () => {
         latestPosition: { latitude: 25.305, longitude: 55.378 },
       } as TripView),
     ).toBe(false);
+  });
+
+  it("merges a new trip at the front and keeps the higher version", () => {
+    const first = {
+      trip: { id: "trip-a", version: 1, status: "created" },
+    } as TripView;
+    const incoming = {
+      trip: { id: "trip-b", version: 1, status: "created" },
+    } as TripView;
+    const newer = {
+      trip: { id: "trip-a", version: 2, status: "in_transit" },
+    } as TripView;
+
+    expect(mergeTripByVersion([first], incoming)).toEqual({
+      trips: [incoming, first],
+      applied: "new",
+    });
+    expect(mergeTripByVersion([first], newer).applied).toBe("newer");
+    expect(mergeTripByVersion([newer], first).applied).toBe("unchanged");
+  });
+
+  it("overlays a list snapshot without clobbering a newer local version", () => {
+    const local = {
+      trip: { id: "trip-a", version: 3, status: "in_transit" },
+    } as TripView;
+    const stale = {
+      trip: { id: "trip-a", version: 2, status: "created" },
+    } as TripView;
+    const extra = {
+      trip: { id: "trip-b", version: 1, status: "created" },
+    } as TripView;
+    const created = {
+      trip: { id: "trip-c", version: 1, status: "created" },
+    } as TripView;
+
+    expect(mergeTripListByVersion([local, extra], [stale, created])).toEqual([
+      extra,
+      local,
+      created,
+    ]);
+  });
+
+  it("builds create and assign toasts and skips unknown status targets", () => {
+    expect(tripCreatedNotice("TRIP-DEMO-001")).toEqual({
+      type: "success",
+      title: "Trip created",
+      description: "TRIP-DEMO-001 is ready for driver assignment.",
+    });
+    expect(tripAssignedNotice("Bilal Rahman", "TRIP-DEMO-001")).toEqual({
+      type: "success",
+      title: "Driver assigned",
+      description: "Bilal Rahman will handle TRIP-DEMO-001.",
+    });
+    expect(
+      tripListUpdateNotice({
+        type: "created",
+        trip: trip,
+      }),
+    ).toMatchObject({ title: "Trip created" });
+    expect(
+      tripListUpdateNotice({
+        type: "status",
+        to: "created",
+        trip,
+      }),
+    ).toBeNull();
   });
 });

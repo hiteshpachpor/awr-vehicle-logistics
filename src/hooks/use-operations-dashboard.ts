@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDemoAuth } from "@/components/auth/demo-auth-provider";
 import { useDriverLocation } from "@/hooks/use-driver-location";
 import { useTripEvents } from "@/hooks/use-trip-events";
+import { useTripListEvents } from "@/hooks/use-trip-list-events";
 import { canAccessTrip, getSessionHome } from "@/lib/demo-auth";
 import {
   DriverLocationAccessError,
@@ -15,6 +16,7 @@ import type {
   ApiErrorBody,
   DriverOption,
   Position,
+  TripListUpdate,
   TripMutationError,
   TripStatus,
   TripView,
@@ -22,6 +24,11 @@ import type {
 import {
   getApiErrorMessage,
   matchesTrip,
+  mergeTripByVersion,
+  mergeTripListByVersion,
+  tripAssignedNotice,
+  tripCreatedNotice,
+  tripListUpdateNotice,
   tripTransitionFailureNotice,
   tripTransitionSuccessNotice,
   type TripTransitionStatus,
@@ -30,6 +37,7 @@ import {
   SIMULATION_INTERVAL_MS,
   type SimulationPace,
 } from "@/lib/simulation";
+import { broadcastTripListUpdate } from "@/lib/trip-list-sync";
 
 export type OperationsNotice = {
   type: "success" | "error";
@@ -61,14 +69,10 @@ export function useOperationsDashboard({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | TripStatus>("all");
   const [notice, setNotice] = useState<OperationsNotice | null>(
-    createdReference
-      ? {
-          type: "success",
-          title: "Trip created",
-          description: `${createdReference} is ready for driver assignment.`,
-        }
-      : null,
+    createdReference ? tripCreatedNotice(createdReference) : null,
   );
+  const [highlightedTripIds, setHighlightedTripIds] = useState<string[]>([]);
+  const [revealTripId, setRevealTripId] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -81,6 +85,8 @@ export function useOperationsDashboard({
   const [simulationPace, setSimulationPace] = useState<SimulationPace | null>(
     null,
   );
+  const tripsRef = useRef<TripView[]>([]);
+  const highlightTimers = useRef(new Map<string, number>());
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
@@ -131,7 +137,13 @@ export function useOperationsDashboard({
         return;
       }
 
-      setTrips(loadedTrips);
+      setTrips((current) => {
+        const next = focused
+          ? loadedTrips
+          : mergeTripListByVersion(current, loadedTrips);
+        tripsRef.current = next;
+        return next;
+      });
       setSelectedId((current) => {
         if (current && loadedTrips.some((trip) => trip.trip.id === current)) {
           return current;
@@ -287,8 +299,8 @@ export function useOperationsDashboard({
 
   const handlePosition = useCallback(
     (position: Position) => {
-      setTrips((current) =>
-        current.map((trip) =>
+      setTrips((current) => {
+        const next = current.map((trip) =>
           trip.trip.id === position.tripId
             ? {
                 ...trip,
@@ -296,8 +308,10 @@ export function useOperationsDashboard({
                 latestPosition: position,
               }
             : trip,
-        ),
-      );
+        );
+        tripsRef.current = next;
+        return next;
+      });
       if (focused) {
         setPositionLog((current) => mergePositions([position], current));
       }
@@ -314,14 +328,99 @@ export function useOperationsDashboard({
   const replaceTrip = useCallback((updated: TripView) => {
     setTrips((current) => {
       const exists = current.some((trip) => trip.trip.id === updated.trip.id);
-      return exists
+      const next = exists
         ? current.map((trip) =>
             trip.trip.id === updated.trip.id ? updated : trip,
           )
         : [updated, ...current];
+      tripsRef.current = next;
+      return next;
     });
     setSelectedId(updated.trip.id);
     setLastRefresh(new Date());
+  }, []);
+
+  const highlightTrip = useCallback((tripId: string, reveal: boolean) => {
+    setHighlightedTripIds((current) =>
+      current.includes(tripId) ? current : [...current, tripId],
+    );
+    if (reveal) setRevealTripId(tripId);
+    const existing = highlightTimers.current.get(tripId);
+    if (existing) window.clearTimeout(existing);
+    const timer = window.setTimeout(() => {
+      highlightTimers.current.delete(tripId);
+      setHighlightedTripIds((current) =>
+        current.filter((id) => id !== tripId),
+      );
+      setRevealTripId((current) => (current === tripId ? null : current));
+    }, 4_000);
+    highlightTimers.current.set(tripId, timer);
+  }, []);
+
+  const syncTrips = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (vendorId) params.set("vendorId", vendorId);
+      if (driverId) params.set("driverId", driverId);
+      const response = await fetch(
+        `/api/trips${params.size ? `?${params}` : ""}`,
+        { cache: "no-store" },
+      );
+      const body = (await response.json()) as
+        | { data: TripView[] }
+        | ApiErrorBody;
+      if (!response.ok || !("data" in body)) {
+        return;
+      }
+      setTrips((current) => {
+        const next = mergeTripListByVersion(current, body.data);
+        tripsRef.current = next;
+        return next;
+      });
+      setLastRefresh(new Date());
+    } catch {
+      // The next reconnect retries; the open tab keeps its current list.
+    }
+  }, [driverId, vendorId]);
+
+  const handleListUpdate = useCallback(
+    (update: TripListUpdate) => {
+      const merged = mergeTripByVersion(tripsRef.current, update.trip);
+      if (merged.applied === "unchanged") {
+        return;
+      }
+      tripsRef.current = merged.trips;
+      setTrips(merged.trips);
+      setLastRefresh(new Date());
+      const notice = tripListUpdateNotice(update);
+      if (notice) setNotice(notice);
+      highlightTrip(
+        update.trip.trip.id,
+        merged.applied === "new" && update.type === "created",
+      );
+    },
+    [highlightTrip],
+  );
+
+  useTripListEvents({
+    enabled:
+      !focused &&
+      (session?.role === "operations" || session?.role === "controller"),
+    vendorId:
+      vendorId ??
+      (session?.role === "controller" ? session.vendorId : undefined),
+    onUpdate: handleListUpdate,
+    onSync: () => {
+      void syncTrips();
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      for (const timer of highlightTimers.current.values()) {
+        window.clearTimeout(timer);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -381,6 +480,11 @@ export function useOperationsDashboard({
       }
       const updated = body as TripView;
       replaceTrip(updated);
+      broadcastTripListUpdate({
+        type: "status",
+        to: status,
+        trip: updated,
+      });
       if (status !== "in_transit") {
         setSimulating(false);
         setSimulationPace(null);
@@ -441,6 +545,11 @@ export function useOperationsDashboard({
       }
       if ("trip" in body) {
         replaceTrip(body.trip);
+        broadcastTripListUpdate({
+          type: "status",
+          to: body.trip.trip.status,
+          trip: body.trip,
+        });
       }
     } catch (error) {
       setMutationError({
@@ -468,11 +577,16 @@ export function useOperationsDashboard({
         throw new Error(getApiErrorMessage(body as ApiErrorBody));
       }
       replaceTrip(body as TripView);
-      setNotice({
-        type: "success",
-        title: "Driver assigned",
-        description: `${(body as TripView).driver?.name} will handle ${(body as TripView).trip.referenceNumber}.`,
+      broadcastTripListUpdate({
+        type: "assigned",
+        trip: body as TripView,
       });
+      setNotice(
+        tripAssignedNotice(
+          (body as TripView).driver?.name ?? "A driver",
+          (body as TripView).trip.referenceNumber,
+        ),
+      );
     } catch (error) {
       setNotice({
         type: "error",
@@ -521,6 +635,8 @@ export function useOperationsDashboard({
     filter,
     setFilter,
     notice,
+    highlightedTripIds,
+    revealTripId,
     drivers,
     assigningTripId,
     mutating,

@@ -95,6 +95,14 @@ Last-Event-ID: 42
 
 The stream emits `position` events and heartbeat comments. The numeric position id is the SSE cursor. On reconnect, missed rows are replayed from PostgreSQL.
 
+```text
+GET /api/trips/events
+GET /api/trips/events?vendorId=:id
+Accept: text/event-stream
+```
+
+The list stream emits `trip.updated` events when a trip is created, a driver is assigned, or status changes (`created`, `in_transit`, `completed`, `cancelled`). Payload is `{ type, from?, to?, trip }` where `trip` is the same `TripView` as `GET /api/trips/:id`. Operations omits `vendorId`; a logistics vendor controller passes their vendor id. There is no `Last-Event-ID` replay; clients refetch `GET /api/trips` after reconnect.
+
 ## Simulator
 
 ```text

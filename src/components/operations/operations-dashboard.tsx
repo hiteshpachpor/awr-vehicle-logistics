@@ -54,6 +54,8 @@ export function OperationsDashboard({
     filter,
     setFilter,
     notice,
+    highlightedTripIds,
+    revealTripId,
     drivers,
     assigningTripId,
     mutating,
@@ -350,6 +352,8 @@ export function OperationsDashboard({
               onFilterChange={setFilter}
               counts={counts}
               loading={loading}
+              highlightedTripIds={highlightedTripIds}
+              revealTripId={revealTripId}
               drivers={session?.role === "controller" ? drivers : undefined}
               assigningTripId={assigningTripId}
               showVendor={session?.role === "operations"}

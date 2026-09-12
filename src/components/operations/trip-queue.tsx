@@ -48,6 +48,8 @@ export function TripQueue({
   assigningTripId,
   onAssignDriver,
   showVendor = true,
+  highlightedTripIds = [],
+  revealTripId = null,
 }: {
   trips: TripView[];
   query: string;
@@ -60,6 +62,8 @@ export function TripQueue({
   assigningTripId?: string | null;
   onAssignDriver?: (tripId: string, driverId: string) => void;
   showVendor?: boolean;
+  highlightedTripIds?: string[];
+  revealTripId?: string | null;
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(25);
   const [page, setPage] = useState(1);
@@ -79,6 +83,13 @@ export function TripQueue({
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (!revealTripId) return;
+    const index = trips.findIndex((trip) => trip.trip.id === revealTripId);
+    if (index < 0) return;
+    setPage(Math.floor(index / pageSize) + 1);
+  }, [pageSize, revealTripId, trips]);
 
   return (
     <section className="w-full self-start">
@@ -139,7 +150,11 @@ export function TripQueue({
               return (
               <li
                 key={trip.trip.id}
-                className="overflow-hidden transition-colors"
+                className={cn(
+                  "overflow-hidden transition-colors",
+                  highlightedTripIds.includes(trip.trip.id) &&
+                    "trip-row-highlight",
+                )}
               >
                 <div className="group relative grid p-4 outline-none transition-colors hover:bg-muted/45 min-[560px]:grid-cols-[minmax(180px,.8fr)_minmax(260px,1.2fr)] min-[560px]:gap-x-5 sm:p-5 lg:grid-cols-[minmax(145px,.65fr)_minmax(230px,1.15fr)_minmax(280px,1.2fr)_max-content_32px] lg:items-center lg:gap-6">
                 <Link
