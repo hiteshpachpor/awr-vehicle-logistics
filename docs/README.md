@@ -4,6 +4,7 @@ If you just want to run the app, start with the [README](../README.md). This fol
 
 - [Assignment brief](assignment-brief.md)
 - [Deliverable 1 checklist](deliverable-1-checklist.md)
+- [Deliverable 2 presentation](deliverable-2-presentation-content.md)
 - [Additional features](additional-features.md)
 - [Technical decisions](technical-decisions.md)
 - [API](api.md)
