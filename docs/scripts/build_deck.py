@@ -12,39 +12,11 @@ OUT = Path(__file__).resolve().parent / "deck.html"
 
 text = SRC.read_text(encoding="utf-8")
 
-# Split into slide chunks on lines that are exactly '---', but not inside ``` fences.
-lines = text.split("\n")
-chunks = []
-cur = []
-in_fence = False
-for ln in lines:
-    if ln.strip().startswith("```"):
-        in_fence = not in_fence
-        cur.append(ln)
-        continue
-    if not in_fence and ln.strip() == "---":
-        chunks.append(cur)
-        cur = []
-        continue
-    cur.append(ln)
-chunks.append(cur)
-
 def inline_md(s):
     s = html.escape(s, quote=False)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
     return s
-
-def render_table(rows):
-    header = rows[0]
-    body = rows[2:]
-    out = ['<table>']
-    out.append("<thead><tr>" + "".join(f"<th>{inline_md(c.strip())}</th>" for c in header) + "</tr></thead>")
-    out.append("<tbody>")
-    for r in body:
-        out.append("<tr>" + "".join(f"<td>{inline_md(c.strip())}</td>" for c in r) + "</tr>")
-    out.append("</tbody></table>")
-    return "\n".join(out)
 
 def split_row(line):
     line = line.strip()
@@ -52,317 +24,159 @@ def split_row(line):
     if line.endswith("|"): line = line[:-1]
     return line.split("|")
 
+def render_table(rows):
+    header, body = rows[0], rows[2:]
+    out = ["<table><thead><tr>"]
+    out += [f"<th>{inline_md(c.strip())}</th>" for c in header]
+    out.append("</tr></thead><tbody>")
+    for r in body:
+        out.append("<tr>" + "".join(f"<td>{inline_md(c.strip())}</td>" for c in r) + "</tr>")
+    out.append("</tbody></table>")
+    return "".join(out)
+
 def render_block(block_lines):
-    """Render markdown lines (no slide separators) into HTML, extracting the
-    talking track into its own HTML. Returns (main_html, talking_track_html_or_None)."""
-    html_parts = []
-    i = 0
-    n = len(block_lines)
-    talking = []
-    in_talking = False
-    para_buf = []
-    list_buf = []
+    """Renders markdown lines (no diagrams) into slide HTML."""
+    parts, para, items = [], [], []
+    list_tag = "ul"
 
-    def flush_para():
-        nonlocal para_buf
-        if para_buf:
-            txt = " ".join(para_buf).strip()
-            if txt:
-                html_parts.append(f"<p>{inline_md(txt)}</p>")
-            para_buf = []
+    def flush():
+        nonlocal para, items
+        if para:
+            parts.append(f"<p>{inline_md(' '.join(para))}</p>")
+            para = []
+        if items:
+            parts.append(f"<{list_tag}>" + "".join(f"<li>{inline_md(x)}</li>" for x in items) + f"</{list_tag}>")
+            items = []
 
-    def flush_list():
-        nonlocal list_buf
-        if list_buf:
-            html_parts.append("<ul>" + "".join(f"<li>{inline_md(x)}</li>" for x in list_buf) + "</ul>")
-            list_buf = []
-
+    i, n = 0, len(block_lines)
     while i < n:
-        raw = block_lines[i]
-        ln = raw.rstrip()
-        stripped = ln.strip()
-
+        stripped = block_lines[i].strip()
         if stripped.startswith("<!--"):
-            flush_para(); flush_list()
-            if "-->" not in stripped[4:]:
+            flush()
+            while i < n and "-->" not in block_lines[i]:
                 i += 1
-                while i < n and "-->" not in block_lines[i]:
-                    i += 1
-            if i < n:
-                i += 1
-            continue
-
-        if stripped.startswith("**Talking track**"):
-            flush_para(); flush_list()
-            in_talking = True
             i += 1
             continue
-
-        if stripped.startswith("```mermaid"):
-            flush_para(); flush_list()
-            i += 1
-            mcode = []
-            while i < n and not block_lines[i].strip().startswith("```"):
-                mcode.append(block_lines[i])
-                i += 1
-            i += 1  # skip closing ```
-            code = "\n".join(mcode)
-            if in_talking:
-                talking.append(("mermaid", code))
-            else:
-                html_parts.append(f'<div class="mermaid-wrap"><pre class="mermaid">{html.escape(code)}</pre></div>')
-            continue
-
         if stripped.startswith("```"):
-            flush_para(); flush_list()
+            flush()
             i += 1
             code = []
             while i < n and not block_lines[i].strip().startswith("```"):
-                code.append(block_lines[i])
-                i += 1
+                code.append(block_lines[i]); i += 1
             i += 1
-            block = f'<pre class="codeblock">{html.escape(chr(10).join(code))}</pre>'
-            (talking.append(("html", block)) if in_talking else html_parts.append(block))
+            parts.append(f'<pre class="codeblock">{html.escape(chr(10).join(code))}</pre>')
             continue
-
         if stripped.startswith("|"):
-            flush_para(); flush_list()
-            table_rows = []
+            flush()
+            rows = []
             while i < n and block_lines[i].strip().startswith("|"):
-                table_rows.append(split_row(block_lines[i]))
-                i += 1
-            tbl = render_table(table_rows)
-            (talking.append(("html", tbl)) if in_talking else html_parts.append(tbl))
+                rows.append(split_row(block_lines[i])); i += 1
+            parts.append(render_table(rows))
             continue
-
-        if stripped.startswith("#### "):
-            flush_para(); flush_list()
-            txt = f"<h4>{inline_md(stripped[5:])}</h4>"
-            (talking.append(("html", txt)) if in_talking else html_parts.append(txt))
-            i += 1
-            continue
-
         if re.match(r"^\*\*[^*]+\*\*$", stripped):
-            flush_para(); flush_list()
-            txt = f"<h4>{inline_md(stripped)}</h4>"
-            (talking.append(("html", txt)) if in_talking else html_parts.append(txt))
-            i += 1
-            continue
-
-        if re.match(r"^\d+\. ", stripped):
-            flush_para()
-            list_buf.append(re.sub(r"^\d+\.\s+", "", stripped))
-            i += 1
-            continue
-
-        if stripped.startswith("- "):
-            flush_para()
-            list_buf.append(stripped[2:])
-            i += 1
-            continue
-
-        if stripped == "":
-            flush_para(); flush_list()
-            i += 1
-            continue
-
-        (talking.append(("text", stripped)) if in_talking else para_buf.append(stripped))
+            flush()
+            parts.append(f"<h4>{inline_md(stripped[2:-2])}</h4>")
+        elif re.match(r"^\d+\. ", stripped):
+            if para: flush()
+            list_tag = "ol"
+            items.append(re.sub(r"^\d+\.\s+", "", stripped))
+        elif stripped.startswith("- "):
+            if para: flush()
+            list_tag = "ul"
+            items.append(stripped[2:])
+        elif stripped == "" or stripped == "---":
+            flush()
+        else:
+            para.append(stripped)
         i += 1
+    flush()
+    return "\n".join(parts)
 
-    flush_para(); flush_list()
+# ---- Parse: "## [N.] Section" -> sections, "### Sub-title" -> slides ----
+# Each slide body is split so every mermaid diagram becomes its own slide.
+slides = []  # dicts: section_num, section_title, subtitle, kind, content
+section_num, section_title = None, None
+subtitle, buf = None, []
+in_fence = False
 
-    talking_html = None
-    if talking:
-        parts = []
+def flush_slide():
+    global buf
+    if subtitle is None:
         buf = []
-        def flush_buf():
-            if buf:
-                parts.append(f"<p>{inline_md(' '.join(buf))}</p>")
-                buf.clear()
-        for kind, val in talking:
-            if kind == "text":
-                buf.append(val)
-            else:
-                flush_buf()
-                parts.append(f'<pre class="mermaid">{html.escape(val)}</pre>' if kind == "mermaid" else val)
-        flush_buf()
-        talking_html = "\n".join(parts)
-
-    return "\n".join(html_parts), talking_html
-
-# Count numbered slides up front so the "NN / total" kicker stays accurate.
-TOTAL_NUMBERED = sum(
-    1 for chunk in chunks
-    for l in chunk
-    if re.match(r"^##\s+\d+\.\s+.*$", l.strip())
-)
-
-def is_vertical_flowchart(code):
-    for l in code.split("\n"):
-        s = l.strip()
-        if not s:
-            continue
-        return bool(re.match(r"^(flowchart|graph)\s+(TB|TD)\b", s, re.IGNORECASE))
-    return False
-
-def split_vertical_diagrams(body_lines):
-    """Pulls top-to-bottom mermaid flowcharts out as their own segments so they
-    can get a full-slide treatment; everything else stays grouped as text
-    segments (still handled by render_block, LR/sequence/state diagrams included).
-    Returns a list of ('text', lines) / ('diagram', mermaid_code) tuples."""
-    segments = []
-    cur = []
+        return
+    text_lines = []
     i = 0
-    n = len(body_lines)
-    while i < n:
-        stripped = body_lines[i].strip()
-        if stripped.startswith("```mermaid"):
+    while i < len(buf):
+        if buf[i].strip().startswith("```mermaid"):
+            if any(l.strip() for l in text_lines):
+                slides.append(dict(num=section_num, section=section_title, subtitle=subtitle, kind="text", content=text_lines))
+            text_lines = []
             j = i + 1
-            code_lines = []
-            while j < n and not body_lines[j].strip().startswith("```"):
-                code_lines.append(body_lines[j])
-                j += 1
-            code = "\n".join(code_lines)
-            if is_vertical_flowchart(code):
-                segments.append(("text", cur)); cur = []
-                segments.append(("diagram", code))
-            else:
-                cur.append(body_lines[i])
-                cur.extend(code_lines)
-                cur.append(body_lines[j] if j < n else "```")
+            code = []
+            while j < len(buf) and not buf[j].strip().startswith("```"):
+                code.append(buf[j]); j += 1
+            slides.append(dict(num=section_num, section=section_title, subtitle=subtitle, kind="diagram", content="\n".join(code)))
             i = j + 1
             continue
-        cur.append(body_lines[i])
+        text_lines.append(buf[i])
         i += 1
-    segments.append(("text", cur))
-    return segments
+    if any(l.strip() and not l.strip().startswith("<!--") for l in text_lines):
+        slides.append(dict(num=section_num, section=section_title, subtitle=subtitle, kind="text", content=text_lines))
+    buf = []
+
+for ln in text.split("\n"):
+    stripped = ln.strip()
+    if stripped.startswith("```"):
+        in_fence = not in_fence
+    if not in_fence:
+        m2 = re.match(r"^##\s+(?:(\d+)\.\s+)?(.+)$", stripped)
+        m3 = re.match(r"^###\s+(.+)$", stripped)
+        if m3:
+            flush_slide()
+            subtitle = m3.group(1)
+            continue
+        if m2 and not stripped.startswith("###"):
+            flush_slide()
+            subtitle = None
+            section_num, section_title = m2.group(1), m2.group(2)
+            continue
+    buf.append(ln)
+flush_slide()
 
 slides_html = []
-for ci, chunk in enumerate(chunks):
-    heading = None
-    body_start = 0
-    for j, l in enumerate(chunk):
-        m = re.match(r"^##\s+(\d+)\.\s+(.*)$", l.strip())
-        if m:
-            heading = (m.group(1), m.group(2))
-            body_start = j + 1
-            break
-    if heading is None:
-        continue  # title chunk (ci == 0) or appendix — handled separately
-
-    num, title = heading
-    body_lines = chunk[body_start:]
-    segments = split_vertical_diagrams(body_lines)
-
-    # Drop text segments that are entirely blank so we don't emit empty slides.
-    rendered_segments = []
-    for kind, val in segments:
-        if kind == "text" and not any(l.strip() for l in val):
-            continue
-        rendered_segments.append((kind, val))
-
-    total_parts = len(rendered_segments)
-    for part_i, (kind, val) in enumerate(rendered_segments):
-        kicker = f"Vehicle live tracking · {num.zfill(2)} / {TOTAL_NUMBERED}"
-        if total_parts > 1:
-            kicker += f" · part {part_i + 1} of {total_parts}"
-
-        if kind == "diagram":
-            slide = f'''
+TOTAL = len(slides) + 1
+for idx, sl in enumerate(slides, start=2):
+    kicker = f"{sl['num']}. {sl['section']}" if sl["num"] else sl["section"]
+    footer = f'<div class="slide-footer"><span>Vehicle Live Tracking</span><span>{idx} / {TOTAL}</span></div>'
+    if sl["kind"] == "diagram":
+        slides_html.append(f"""
 <section class="slide slide-diagram">
-  <div class="slide-kicker">{kicker}</div>
-  <h2 class="slide-title">{inline_md(title)}</h2>
+  <div class="slide-kicker">{html.escape(kicker)}</div>
+  <h2 class="slide-title">{inline_md(sl['subtitle'])}</h2>
   <div class="slide-body slide-body-diagram">
-    <div class="mermaid-wrap-full"><pre class="mermaid">{html.escape(val)}</pre></div>
+    <div class="mermaid-wrap-full"><pre class="mermaid">{html.escape(sl['content'])}</pre></div>
   </div>
-</section>
-'''
-        else:
-            main_html, talking_html = render_block(val)
-            slide = f'''
+  {footer}
+</section>""")
+    else:
+        slides_html.append(f"""
 <section class="slide">
-  <div class="slide-kicker">{kicker}</div>
-  <h2 class="slide-title">{inline_md(title)}</h2>
+  <div class="slide-kicker">{html.escape(kicker)}</div>
+  <h2 class="slide-title">{inline_md(sl['subtitle'])}</h2>
   <div class="slide-body">
-    {main_html}
+    {render_block(sl['content'])}
   </div>
-  {f'<div class="talking-track"><div class="tt-label">Talking track</div>{talking_html}</div>' if talking_html else ''}
-</section>
-'''
-        slides_html.append(slide)
+  {footer}
+</section>""")
 
-# ---- Title slide (hand-built) ----
-title_slide = '''
+title_slide = """
 <section class="slide slide-title-page">
-  <div class="title-eyebrow">AWR Group · GIT</div>
-  <h1>Vehicle live tracking</h1>
-  <p class="title-sub">Product Engineering Manager assignment</p>
-  <p class="title-sub2">Seven-day working slice, plus how I would take it to production</p>
+  <div class="title-eyebrow">AW Rostamani Group IT</div>
+  <h1>Vehicle Live Tracking</h1>
+  <p class="title-sub">Architecture presentation · Product Engineering Manager assignment</p>
+  <p class="title-sub2">Hitesh Pachpor · 12 September 2026</p>
 </section>
-'''
-
-# ---- Appendix slides ----
-appendix_idx = None
-for ci, chunk in enumerate(chunks):
-    if "# Presenter appendix" in "\n".join(chunk):
-        appendix_idx = ci
-        break
-
-appendix_slides = []
-if appendix_idx is not None:
-    # Appendix content spans multiple '---' chunks with no separator between
-    # "## Demo" and "## Questions", so flatten and re-split on '## ' headings.
-    appendix_lines = []
-    for chunk in chunks[appendix_idx:]:
-        appendix_lines.extend(chunk)
-
-    sections = []
-    cur_heading = None
-    cur_body = []
-    for l in appendix_lines:
-        m2 = re.match(r"^##\s+(.*)$", l.strip())
-        if m2:
-            if cur_heading is not None:
-                sections.append((cur_heading, cur_body))
-            cur_heading = m2.group(1)
-            cur_body = []
-        elif cur_heading is not None:
-            cur_body.append(l)
-    if cur_heading is not None:
-        sections.append((cur_heading, cur_body))
-
-    def emit_appendix_slide(heading, body_lines):
-        main_html, _ = render_block(body_lines)
-        appendix_slides.append(f'''
-<section class="slide slide-appendix">
-  <div class="slide-kicker">Presenter appendix</div>
-  <h2 class="slide-title">{inline_md(heading)}</h2>
-  <div class="slide-body">
-    {main_html}
-  </div>
-</section>
-''')
-
-    QPER = 4  # Q&A pairs per slide, tuned so nothing overflows the page
-    for heading, body_lines in sections:
-        if heading.strip() == "Questions I expect":
-            units, cur_unit = [], []
-            for l in body_lines:
-                if re.match(r"^\*\*[^*]+\*\*$", l.strip()) and cur_unit:
-                    units.append(cur_unit)
-                    cur_unit = [l]
-                else:
-                    cur_unit.append(l)
-            if cur_unit:
-                units.append(cur_unit)
-
-            total_parts = (len(units) + QPER - 1) // QPER
-            for gi in range(0, len(units), QPER):
-                flat = [l for u in units[gi:gi + QPER] for l in u]
-                part_heading = f"{heading} ({gi // QPER + 1}/{total_parts})"
-                emit_appendix_slide(part_heading, flat)
-        else:
-            emit_appendix_slide(heading, body_lines)
+"""
 
 CSS = '''
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -386,7 +200,7 @@ html,body{
   background:var(--background);
   color:var(--foreground);
   font-family:"Avenir Next","Inter","Segoe UI",sans-serif;
-  font-size:15px;
+  font-size:17px;
 }
 
 @page{ size: 13.333in 7.5in; margin:0; }
@@ -413,7 +227,7 @@ html,body{
 }
 
 .slide-kicker{
-  font-size:12px;
+  font-size:13.5px;
   letter-spacing:0.08em;
   text-transform:uppercase;
   color:var(--muted-foreground);
@@ -422,9 +236,9 @@ html,body{
 }
 
 .slide-title{
-  font-size:30px;
+  font-size:34px;
   font-weight:700;
-  margin:0 0 10px 0;
+  margin:0 0 14px 0;
   color:var(--foreground);
   letter-spacing:-0.01em;
 }
@@ -433,15 +247,15 @@ html,body{
   flex:1;
   min-height:0;
   overflow:hidden;
-  font-size:15.5px;
-  line-height:1.38;
+  font-size:18px;
+  line-height:1.42;
 }
 
 .slide-body p{ margin:0 0 6px 0; }
-.slide-body ul{ margin:0 0 6px 0; padding-left:20px; }
+.slide-body ul, .slide-body ol{ margin:0 0 8px 0; padding-left:22px; }
 .slide-body li{ margin-bottom:3px; }
 .slide-body h4{
-  font-size:15.5px;
+  font-size:17.5px;
   font-weight:700;
   margin:10px 0 6px 0;
   color:var(--primary);
@@ -463,7 +277,7 @@ code{
   border-radius:8px;
   padding:10px 12px;
   font-family:"SF Mono","Menlo",monospace;
-  font-size:13.5px;
+  font-size:15px;
   line-height:1.5;
   white-space:pre-wrap;
   margin:0 0 8px 0;
@@ -473,11 +287,11 @@ table{
   border-collapse:collapse;
   width:100%;
   margin:0 0 10px 0;
-  font-size:14.5px;
+  font-size:16.5px;
 }
 th,td{
   border:1px solid var(--border);
-  padding:5px 9px;
+  padding:6px 10px;
   text-align:left;
   vertical-align:top;
 }
@@ -487,6 +301,7 @@ th{
   color:var(--foreground);
 }
 tbody tr:nth-child(even){ background:var(--surface-strong); }
+tbody td:first-child{ font-weight:600; }
 
 .mermaid-wrap{
   display:flex;
@@ -564,7 +379,7 @@ tbody tr:nth-child(even){ background:var(--surface-strong); }
 }
 .slide-title-page::before{ height:10px; }
 .title-eyebrow{
-  font-size:14px;
+  font-size:16px;
   font-weight:700;
   letter-spacing:0.1em;
   text-transform:uppercase;
@@ -572,24 +387,36 @@ tbody tr:nth-child(even){ background:var(--surface-strong); }
   margin-bottom:18px;
 }
 .slide-title-page h1{
-  font-size:64px;
+  font-size:72px;
   font-weight:800;
   margin:0 0 16px 0;
   letter-spacing:-0.02em;
 }
 .title-sub{
-  font-size:20px;
+  font-size:22.5px;
   color:var(--foreground);
   margin:0 0 8px 0;
   font-weight:600;
 }
 .title-sub2{
-  font-size:15px;
+  font-size:17px;
   color:var(--muted-foreground);
   margin:0;
 }
 
 .slide-appendix .slide-kicker{ color:var(--primary); }
+
+.slide-body p{ margin:0 0 8px 0; }
+.slide-body h4{ margin:12px 0 6px 0; }
+.slide-diagram .slide-title{ text-align:left; }
+.slide-diagram .slide-kicker{ text-align:left; }
+.slide-body-diagram{ padding:0.1in 0; }
+.mermaid-wrap-full svg{ max-height:5.6in !important; }
+.slide-footer{
+  display:flex; justify-content:space-between;
+  font-size:12.5px; color:var(--muted-foreground);
+  padding-top:6px; flex-shrink:0;
+}
 '''
 
 MERMAID_INIT = '''
@@ -605,11 +432,12 @@ mermaid.initialize({
     secondaryColor:"#e9eaec",
     tertiaryColor:"#f0f1f2",
     fontFamily:"Avenir Next, Inter, sans-serif",
-    fontSize:"14px",
+    fontSize:"18px",
     edgeLabelBackground:"#fbfbfc"
   },
   flowchart:{ curve:"basis", htmlLabels:true },
-  sequence:{ actorFontSize:13, noteFontSize:12, messageFontSize:12 }
+  sequence:{ actorFontSize:17, noteFontSize:16, messageFontSize:16 },
+  state:{ }
 });
 window.__renderMermaid = async function(){
   await mermaid.run({ querySelector: ".mermaid" });
@@ -617,13 +445,13 @@ window.__renderMermaid = async function(){
 };
 '''
 
-all_slides = [title_slide] + slides_html + appendix_slides
+all_slides = [title_slide] + slides_html
 
 doc = f'''<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Vehicle live tracking — deck</title>
+<title>Vehicle Live Tracking</title>
 <style>{CSS}</style>
 </head>
 <body>

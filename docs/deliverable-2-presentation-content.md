@@ -1,858 +1,819 @@
-# Vehicle live tracking
+# Vehicle Live Tracking
 
 Architecture presentation · AW Rostamani Group IT · Product Engineering Manager assignment
 
-<!-- This file is the deck: slide title, what goes on the slide, a mermaid diagram where one helps, then a talking track in normal spoken language. -->
-
----
-
-## 1. Vehicle live tracking 
-
-****
-
-AW Rostamani Group IT
-
-Product Engineering Manager assignment
-
-Hitesh Pachpor · 12th September 2026
-
-<!-- Seven-day working slice, plus how I would take it to production -->
+Hitesh Pachpor · 12 September 2026
 
 <!--
-**Talking track**
-
-Thanks for having me. I spent the week on a live tracking system for vehicles that logistics vendors pick up and drop off for AWR. I'll walk through who uses it, how the software is put together, and what I would change before this sat in front of a real vendor. After the slides I can show the running app.
+How this file becomes the deck (docs/scripts/build_deck.py):
+- "## N. Title" starts a section from the brief. "## Title" without a number is an unnumbered section.
+- "### Sub-title" starts a slide. Sub-titles use the brief's numbering (1.1, 1.2, ...). Repeat the same sub-title to continue on another slide.
+- Every mermaid diagram is placed on its own full-size slide, in the order it appears.
+- HTML comments are not rendered.
 -->
 
----
+## Introduction
 
-## 2. What we're solving
+### The scenario
 
-AWR works with third-party logistics vendors who handle vehicle pick-up and drop-off for customers. Once a trip is underway, operations needs to see where the vehicle is, on a web dashboard, without refreshing.
+AW Rostamani (AWR) works with third-party logistics (3PL) vendors who pick up and drop off customers' vehicles, for example between a showroom and a customer's home.
 
-Three people are in that loop:
+Once a trip has started, the AWR operations team needs to see where the vehicle is on a map in a web dashboard, and the map should update without refreshing the page.
 
-- AWR Operations, who create and track trips
-- A 3PL Vendor Controller, who assigns trips to one of its drivers and tracks them
-- A 3PL Vendor Driver, who starts/completes trips and shares location while the trip is active
+Each trip involves these roles:
 
-The demo data is set in the UAE.
+- **AWR Operations** creates trips and tracks them.
+- **Vendor Controller** works for the 3PL vendor and assigns each trip to one of the vendor's drivers.
+- **Vendor Driver** starts the trip, shares their location while driving, and ends the trip.
 
-<!--
-**Talking track**
+The demo data is based in the UAE and uses AWR's automotive brands (Nissan, INFINITI, Renault, Chery and Zeekr).
 
-This is a pretty familiar operations problem. A customer's car is with a vendor, and the desk in AWR needs a live picture of that job. I treated it as a logistics handoff, with a showroom at one end and a home address at the other. The seed data uses Nissan, INFINITI, Renault, Chery, and Zeekr because those are AWR's automotive brands, and it keeps the demo feeling like your world.
--->
-
----
-
-## 3. How the three journeys fit together
-
-```mermaid
-flowchart TB
-  Ops[AWR operations creates the trip against a vendor]
-  Ctrl[Vendor controller assigns a driver]
-  Drv[Driver starts the trip and shares GPS]
-  Mon[Operations watches the map and the ping log]
-  End[Driver ends the trip, or the simulator finishes it]
-
-  Ops --> Ctrl --> Drv --> Mon
-  Drv --> End
-  Mon --> End
-```
-
-I decided to split creation of a trip and assigning it to a driver. AWR Operations creates the job. The vendor picks the driver. That matches how a 3PL handoff would work.
-
-<!--
-**Talking track**
-
-If you put the driver on the create form, it looks like AWR is dispatching the vendor's staff. I didn't want that. Operations opens the job against a vendor, the vendor controller assigns someone from their roster, and the driver is the one who starts sharing location. I'll come back to admin in a couple of slides, because the brief asked for that journey separately.
--->
-
----
-
-## 4. What has been built
-
-| What's in the brief | What's in the repo |
-| --- | --- |
-| Trip APIs | Create, list, get trips · Assign a driver · Start, complete, cancel a trip |
-| Active trips list | Queue with status, search, pagination |
-| Location ingest | `POST` with lat, lng, timestamp, optional speed, optional `eventId` |
-| Live updates without polling | SSE, with Postgres `LISTEN` / `NOTIFY`, and replay after a reconnect |
-| Live map | Mapbox, marker moves as pings arrive |
-| Trip timeline | Ping log with device time, received time, speed, source |
-| Simulator | Runs on the server, follows the Mapbox driving route, posts through the same location API |
-| Simulator controls | Driver starts and stops, sets interval and distance per ping |
-| Datastore | PostgreSQL 17 |
-| Responsive layout | Works well on all viewports |
-
-I also added a few things: three workspaces, occupancy rules so a driver or vehicle isn't on two live jobs, real browser GPS with an offline outbox, Google Maps link import on new trip, Docker Compose, and UAE seed data.
-
-Login in the app is a persona switcher. The password is `password`, the session lives in the browser, and the APIs are open. The brief said auth could stay in the presentation so I didn't implement it considering the tight timeline.
-
-<!--
-**Talking track**
-
-I used the week to get a full loop working: create a trip, assign a driver, move a vehicle, and watch it on the map. The extras are there because a dashboard needs list filters, lookups, and a way to start a trip. I'll be clear as we go about what is running today and what I'm proposing for production. Auth is the main one. I didn't put a fake JWT on open APIs.
--->
-
----
-
-## 5. Vendor driver journey
+### The scenario
 
 ```mermaid
 flowchart LR
-  A[Controller assigns a driver] --> B[Driver starts, or starts a simulation]
-  B --> C[GPS pings post every few seconds]
-  C --> D[Driver ends the trip, or the simulator completes it]
+  Ops["AWR Operations<br/>creates a trip for a vendor"]
+  Ctrl["Vendor Controller<br/>assigns a driver"]
+  Drv["Vendor Driver<br/>starts the trip and shares location"]
+  Mon["AWR Operations<br/>watches the vehicle on the map"]
+  End["Vendor Driver<br/>ends the trip"]
+
+  Ops --> Ctrl --> Drv --> Mon --> End
 ```
+
+### What the demo version includes
+
+| Requirement from the brief | How it is covered in the demo version |
+| --- | --- |
+| Trip management API | Trips can be created, listed, viewed, assigned to a driver, started, completed and cancelled. |
+| Location ingestion endpoint | `POST /api/trips/:id/location` accepts latitude, longitude, timestamp, and an optional speed and event ID. |
+| Live updates without polling | Server-Sent Events (SSE). Updates missed while disconnected are sent again on reconnect. |
+| Trip simulator | Runs on the server, follows the driving route from Mapbox, and sends pings through the same location API as a real driver. |
+| Data layer | PostgreSQL 17. |
+| Active trips list | Trip list with status, search and pagination. It updates live when trips change. |
+| Live map view | Mapbox map with a vehicle marker that moves as each ping arrives. |
+| Trip timeline | A log of location pings showing device time, received time, speed and source. |
+| Vendor simulator panel | The driver can start and stop a simulation and set the update interval and distance per ping. |
+| Responsive layout | Works on desktop, tablet and mobile. |
+
+### What the demo version includes
+
+The demo version also includes the following, which the brief did not ask for:
+
+- A separate workspace for each role.
+- Rules that stop a driver or a vehicle from being on two live trips at the same time.
+- Real GPS from the driver's browser, with an offline queue that holds pings until the network is back.
+- Pasting a Google Maps link to fill in the pickup and drop-off locations when creating a trip.
+- Docker Compose to run the whole stack with one command, and UAE-based seed data.
+
+Login in the demo version is a simple role switcher, and the APIs are not protected. The brief allows authentication to be covered in the presentation only, and the proposed design is in section 6.
+
+## 1. Use Cases & User Journeys
+
+### 1.1 Vendor driver flow
+
+```mermaid
+flowchart LR
+  A["Controller assigns<br/>the trip to a driver"] --> B["Driver starts the trip<br/>or starts a simulation"]
+  B --> C["Location is sent<br/>every few seconds"]
+  C --> D["Driver ends the trip,<br/>or the simulation completes it"]
+```
+
+### 1.1 Vendor driver flow
 
 **Live trip**
 
-The driver allows location, starts the trip, and the browser samples GPS every 5 seconds. Pings sit in an outbox if the network drops, then POST to `/api/trips/:id/location` with the original device timestamp and a stable `eventId`. The outbox keeps up to 720 pings.
+The driver allows location access in the browser and starts the trip. The browser reads the location every 5 seconds and sends it to the server.
+
+If the network drops, pings are kept in a queue on the device (up to 720 pings) and sent once the connection is back. Each ping keeps its original time and a unique event ID, so a ping that gets sent twice is only saved once.
 
 **Simulated trip**
 
-The driver picks an interval between 1 and 60 seconds, and a step between 0.1 and 20 km. The server starts the trip, follows the same Mapbox driving route the map draws, and posts through the same location service. After the last drop-off ping it completes the trip. Stopping the simulation leaves the trip in transit.
+The driver chooses how often a ping is sent (1 to 60 seconds) and how far the vehicle moves between pings (0.1 to 20 km). The server starts the trip and moves the vehicle along the driving route shown on the map. Each ping goes through the same location API that a real driver uses.
 
-Only the driver can start or complete. Operations can cancel.
+After the last ping at the drop-off point, the trip is completed automatically. If the simulation is stopped early, the trip stays in transit.
+
+### 1.1 Vendor driver flow
 
 ```mermaid
 stateDiagram-v2
-  [*] --> created
-  created --> in_transit: driver starts or simulation starts
-  created --> cancelled: operations cancels
-  in_transit --> completed: driver ends or simulation finishes
-  in_transit --> cancelled: operations cancels
-  completed --> [*]
-  cancelled --> [*]
+  direction LR
+  state "In transit" as InTransit
+  [*] --> Scheduled
+  Scheduled --> InTransit: Driver starts the trip
+  Scheduled --> Cancelled: Operations cancels
+  InTransit --> Completed: Driver ends the trip
+  InTransit --> Cancelled: Operations cancels
+  Completed --> [*]
+  Cancelled --> [*]
 ```
 
-A few rules sit on those transitions: a driver has to be assigned before start, one in-transit trip per driver, one active trip per vehicle, a three-hour gap on scheduled work, and an optimistic `version` on updates so two people editing at once don't silently overwrite each other.
+### 1.1 Vendor driver flow
 
-I store two times on every ping. `recorded_at` is what the device said. `received_at` is when we accepted it. If a driver was in a basement, operations can see that the phone thought it was 14:01 and we got it at 14:04.
+**Trip rules**
 
-<!--
-**Talking track**
+- A driver must be assigned before the trip can start.
+- Only the assigned driver can start or complete a trip. Operations can cancel it.
+- A driver can have only one trip in transit at a time.
+- A vehicle can be on only one scheduled or in-transit trip at a time.
+- A driver's scheduled trips must be at least three hours apart.
+- If two people update the same trip at the same time, the second update is rejected so it does not overwrite the first.
 
-The simulator is doing the same job as a phone. I didn't animate the marker in the browser. The Next.js process walks the route and posts GPS the way a vendor device would. That's the bit I want to show in the walkthrough, because it proves the ingest path, the database, and the live stream together. Offline was worth building even in a week. Drivers go through parkades. The outbox keeps the original timestamp so a late flush doesn't look like a new ping.
--->
+**Timestamps on each ping**
 
----
+Each ping stores the time the device recorded it and the time the server received it. For example, if a driver loses signal in a basement car park, operations can see that the location was recorded at 14:01 and arrived at 14:04.
 
-## 6. Operations journey
+### 1.2 AWR operations team flow
 
 ```mermaid
 flowchart LR
-  Q[Trip queue] --> D[Trip detail]
-  D --> M[Live map]
-  D --> L[Ping log]
-  D --> A[Alerts]
+  Q["Trip list<br/>(monitor dashboard)"] --> D["Trip detail"]
+  D --> M["Live map"]
+  D --> L["Location ping log"]
+  D --> A["Alerts<br/>(proposed)"]
 ```
 
-**What you can do today**
+### 1.2 AWR operations team flow
 
-- See every trip, search, filter by Scheduled, In transit, Completed, Cancelled
-- Create a trip: customer, vehicle, vendor, pickup and drop-off. You can paste a Google Maps link. You don't pick a driver here
-- Open a trip and watch the map and the last 100 pings
-- Cancel a scheduled or in-transit trip
-- See whether the live stream is connected
-- On a completed trip, if the last ping is 50 metres or more from the planned drop-off, the map labels it as the actual drop-off
+**Monitor the dashboard**
 
-Operations cannot start, simulate, or complete a trip.
+- See all trips, search them, and filter by Scheduled, In transit, Completed or Cancelled.
+- The list updates by itself when a trip is created, assigned, started, completed or cancelled.
+- Create a trip by choosing a customer, vehicle, vendor, pickup location and drop-off location. A Google Maps link can be pasted in place of an address. The driver is chosen later by the vendor.
 
-<!--
-**Talking track**
+**View trip detail**
 
-Day to day, operations lives on the queue and then opens a trip that's in trouble. The map and the ping log are in the app now. The alerts column is the next product slice, and I wanted it on this slide because the brief called it out. Stale location is the one I'd build first. If a car hasn't pinged in ten minutes, the desk needs to know before they notice the marker has gone cold.
--->
+- Watch the vehicle move on the map, with the last 100 location pings listed beside it.
+- See whether the live connection is active.
+- Cancel a trip that is scheduled or in transit.
+- On a completed trip, the vehicle's last position is labelled "Actual drop-off" when it is 50 metres or more from the planned drop-off point.
 
----
+Starting, simulating and completing a trip are left to the driver, so operations does not see those buttons.
 
-## 7. Alerts
+### 1.2 AWR operations team flow
 
-The brief's operations flow includes alerts. I didn't implement it, but here's what I would implement:
+**Alerts (proposed, not in the demo version)**
 
-| Alert | Trigger | Recipients |
+| Alert | When it is raised | Who is notified |
 | --- | --- | --- |
-| Stale location | No ping for a few minutes while in transit | Operations can call the vendor |
-| Not started | Scheduled time has passed and the trip is still created | Operations and the vendor controller |
-| Route deviation | Vehicle is too far from the planned line | Operations, and later customer comms |
-| Geofence | Entering or leaving pickup, drop-off, or a yard | Arrival and departure |
-| Drop-off mismatch | We already hint at this at 50 metres | Exception handling |
-| Trip started / completed | Status change | Customer SMS, CRM |
+| Location has gone quiet | No ping for a few minutes while the trip is in transit | Operations, so they can call the vendor |
+| Trip not started | The scheduled time has passed and the trip has not started | Operations and the vendor controller |
+| Off route | The vehicle is too far from the planned route | Operations |
+| Arrived at or left a zone | The vehicle enters or leaves the pickup point, drop-off point or a yard | Operations |
+| Drop-off mismatch | The trip ended far from the planned drop-off point | Operations |
+| Trip started or completed | The trip status changes | The customer (by SMS) and the CRM |
 
-<!-- ## 7. Admin journey
+The first alert to build would be "location has gone quiet". Without it, operations only finds out about a problem when someone notices the marker has stopped moving.
 
-The brief asked for create, assign, and history. I put those with Operations and the vendor controller for this slice. A dedicated admin role still makes sense later.
+### 1.3 Admin flow
 
-| Ability | Built currently | Future extension |
+The demo version has no separate admin role. In a 3PL setup, AWR creates the trip and the vendor assigns the driver, so the admin tasks from the brief are split between the existing roles.
+
+| Admin task | Who does it in the demo version | Proposed future version |
 | --- | --- | --- |
-| Create trips | Operations | Operations stays the desk |
-| Assign drivers | Vendor controller | Rules for reassignment, SLA windows |
-| History | Queue filters and the ping log | Retention, export, replay |
-| Customers, vehicles, vendors, drivers | Read-only lookups, loaded by seed | Full master data |
-| Access | Demo personas | Role admin, audit log, vendor onboarding |
+| Create trips | AWR Operations | Stays with AWR Operations |
+| Assign trips to drivers | Vendor Controller | Add rules for reassigning trips and meeting SLA time windows |
+| View history | Trip list filters and the location ping log | Longer retention, export and trip replay |
+| Manage customers, vehicles, vendors and drivers | Loaded from seed data and read-only | Screens to add and edit these records |
+| Manage user access | Demo role switcher | Role management, vendor onboarding and an audit log |
 
-Later admin work I'd want: vendor API credentials, SLA and geofence config, support impersonation, an audit of who opened a live trip, and export. -->
+Later on, an admin role would also manage vendor API keys, SLA and geofence settings, and the audit log of who viewed a live trip.
 
-<!--
-**Talking track**
+## 2. System Architecture
 
-I didn't make a fourth workspace this week. Creating a job and configuring the system are different jobs, so I left Operations as the desk and kept admin for later. Location is also sensitive. If someone on the support team opens a live map, I'd want that in an audit log. That's admin work, and it can wait until the desk flow is solid.
--->
-
----
-
-## 8. System architecture
+### 2.1 High-level architecture diagram
 
 ```mermaid
-flowchart TB
-  subgraph clients [Clients]
-    Driver[Driver app or simulator]
-    Dash[AWR dashboard]
-  end
+flowchart LR
+  Driver["Client<br/>Driver app<br/>or simulator"]
+  API["API<br/>Location API route"]
+  PG[("Data store<br/>PostgreSQL")]
+  SSE["Real-time layer<br/>SSE endpoint"]
+  Dash["Client<br/>AWR dashboard"]
 
-  subgraph node [Next.js, one long-lived Node process]
-    API[API routes]
-    SSE[SSE endpoint]
-    Listen[LISTEN client]
-  end
-
-  PG[(PostgreSQL)]
-
-  Driver -->|POST /api/trips/id/location| API
-  API -->|INSERT trip_positions| PG
-  PG -->|NOTIFY trip_position_updates| Listen
-  Listen -->|load row by id| SSE
-  Dash -->|EventSource GET /api/trips/id/events| SSE
+  Driver -->|"1. Send location"| API
+  API -->|"2. Save the ping"| PG
+  PG -->|"3. Notify: new ping saved"| SSE
+  SSE -->|"4. Push to the browser"| Dash
 ```
 
-Stack: Next.js 16 App Router, Zod, services and repositories, Drizzle ORM, PostgreSQL 17, Mapbox GL and Directions, Docker Compose, Vitest with Testcontainers.
+### 2.1 High-level architecture diagram
 
-The service runs as a long-lived Node process. SSE connections and the simulator timer need the process to stay up.
+**Technology stack**
 
-Postgres stores the trips and the pings, and it also carries the wake-up through `LISTEN` / `NOTIFY`. That works for a single instance service built for this assignment.
+Next.js 16 (App Router), Zod for request validation, Drizzle ORM, PostgreSQL 17, Mapbox for maps and driving routes, Docker Compose, and Vitest with Testcontainers for tests.
 
-The location POST and the open SSE connections are not coupled. The POST writes a row and the system notifies. If nobody has the dashboard open, the ping is still there. If the tab reconnects, we replay from the table.
+**Long-running Node process**
 
-I looked at an in-memory store, Redis as the system of record, and pushing straight from the POST handler. History and replay die if the process restarts on an in-memory store. Redis is a good bus and a weaker place to keep trip state and an append-only log. Pushing from the POST handler ties vendor traffic to whoever happens to be watching.
+The live connections to the dashboard and the simulator's timer both need a process that keeps running. Serverless functions stop between requests, which would close those connections and stop running simulations.
 
-<!--
-**Talking track**
+**Choice of data store**
 
-The picture to keep is: the phone writes a row, Postgres taps the process on the shoulder, SSE reads that row and sends it to the browser. I kept those steps apart on purpose. The row is what we trust. The notify can be missed, and that's fine, because reconnect replay comes from the table. I'll talk about what happens with a second replica in the scale slide. For this week, one process is the honest shape.
--->
+The brief suggested in-memory storage, Redis or a lightweight database.
 
----
+- **In-memory storage** is quick to set up, but trip history is lost when the process restarts, and missed updates cannot be sent again after a reconnect.
+- **Redis** handles messaging well, but it is less suited to storing trip records and a long history of location pings.
+- **PostgreSQL** was chosen. It stores trips and the full ping history, and its unique indexes enforce the trip rules. Its built-in notification feature (`LISTEN` and `NOTIFY`) is used to tell the app when a new ping is saved, so one database covers both needs while the app runs as a single instance.
 
-## 9. Why I used SSE
+### 2.2 Justification for real-time mechanism chosen
 
-The brief allowed WebSockets or SSE, and ruled out polling.
-
-| Parameter | Polling | WebSockets | SSE |
+| | Polling | WebSockets | Server-Sent Events (SSE) |
 | --- | --- | --- | --- |
-| Direction | Dashboard keeps asking | Both ways | Server to dashboard |
-| Fit for operations | Extra load, feels laggy | More machinery than a map needs | Matches “push locations to whoever is watching” |
-| Reconnect | We'd write it | We'd write it | Browser sends `Last-Event-ID` |
-| In Next.js | Easy | Extra client and an upgrade path | Native stream on the Node runtime |
+| Direction | The dashboard repeatedly asks the server for updates | Both ways | Server to dashboard only |
+| Fit for this dashboard | Adds load, and updates arrive late | Adds a two-way channel the dashboard does not use | Suits a dashboard that only receives updates |
+| Reconnecting | Has to be built | Has to be built | Built into the browser |
+| Support in Next.js | Simple | Needs an extra library and server setup | Works with a standard streaming response |
 
-I went ahead with SSE. The dashboard only listens. `EventSource` reconnects on its own and sends `Last-Event-ID`. Missed rows are replayed from `trip_positions.id`. The stream sends a heartbeat every 15 seconds + `X-Accel-Buffering: no` so a proxy doesn't buffer it.
+SSE was chosen because the dashboard only receives location updates and never sends data back over that connection.
 
-WebSockets are a better option if we would want the system to also communicate back with the drivers, but for this demo I didn't consider that use case.
+If the connection drops, the browser reconnects by itself and sends the ID of the last update it received. The server then sends every ping saved after that ID, so the trail on the map has no gaps.
 
-<!-- On HTTP/1.1 each tab is its own connection. If we ever had a wallboard of many trips, I'd look at HTTP/2 or a small gateway, or one stream that carries several trip ids. -->
+The server also sends a small heartbeat every 15 seconds, so proxies and load balancers do not close the connection as idle.
 
-<!--
-**Talking track**
+WebSockets would be worth adding if the system later needs to send messages to drivers during a trip.
 
-Polling would have been the fastest thing to code, and it wouldn't have met the brief. Between the two push options, the dashboard is a listener, so SSE was the smaller fit. The free reconnect was the part I cared about. People refresh, laptops sleep, and I didn't want a gap in the trail. If someone asks why not WebSockets, my answer is I'd use them on the vendor device later, and leave the map on SSE.
--->
-
----
-
-## 10. How a location ping gets to the map
+### 2.3 How location data flows from the vendor interface to the AWR dashboard
 
 ```mermaid
 sequenceDiagram
   participant D as Driver or simulator
   participant API as Location API
   participant DB as PostgreSQL
-  participant L as LISTEN client
   participant SSE as SSE endpoint
-  participant B as Dashboard
+  participant B as AWR dashboard
 
-  D->>API: POST lat, lng, timestamp, eventId
-  API->>API: Trip must be in transit
-  API->>DB: INSERT trip_positions
+  D->>API: Send location (lat, lng, time, event ID)
+  API->>API: Check the data and that the trip is in transit
+  API->>DB: Save the ping
   alt New ping
-    DB-->>API: new id
-    API->>DB: NOTIFY tripId and positionId
-    DB->>L: notification
-    L->>DB: load row by id
-    L->>SSE: enqueue position event
-    SSE->>B: event position
-  else Same eventId as before
-    DB-->>API: existing row
-    API-->>D: 200 duplicate
+    DB-->>API: Saved
+    API->>DB: Notify that a new ping was saved
+    API-->>D: 201 Created
+    DB->>SSE: Notification
+    SSE->>DB: Load the saved ping
+    SSE->>B: Push the new location
+  else Same event ID was already saved
+    DB-->>API: Already exists
+    API-->>D: 200 OK, marked as a duplicate
   end
 ```
 
-**Storing location pings:**
+### 2.3 How location data flows from the vendor interface to the AWR dashboard
 
-1. POST `/api/trips/:id/location`
-2. Validate lat/lng, timestamp, optional speed, optional `eventId`
-3. Reject if the trip isn't in transit
-4. Insert. If that `eventId` already exists for the trip, return 200 with `duplicate: true` and skip the notify
-5. `recorded_at` is the device time, `received_at` is our clock
+**Saving a ping**
 
-**Sharing location data with Operations:**
+1. The driver's browser or the simulator sends the location to `POST /api/trips/:id/location`.
+2. The server checks the latitude, longitude, timestamp and optional speed.
+3. The ping is rejected if the trip is not in transit.
+4. The ping is saved. If a ping with the same event ID already exists for this trip, it is not saved again and no notification is sent.
 
-1. GET `/api/trips/:id/events`
-2. Subscribe for that trip
-3. Replay rows with `id` greater than `Last-Event-ID`, up to 1000
-4. Hold any notifies that arrive during replay, then send them
-5. The browser keeps the last 100 pings and moves the marker
+**Showing it on the dashboard**
 
-Browser GPS and the simulator both write the same table, with `source` set to `vendor` or `simulator`, and the map doesn't know the difference between them.
+1. When a trip is opened, the dashboard connects to `GET /api/trips/:id/events`.
+2. If the dashboard is reconnecting, the pings it missed are sent first (up to 1,000).
+3. After that, each new ping is pushed as soon as it is saved.
+4. The map marker moves to the new position, and the ping log shows the latest 100 entries.
 
-<!--
-**Talking track**
+Pings from real drivers and from the simulator follow the same path. They are told apart by a `source` field set to `vendor` or `simulator`.
 
-If you remember one flow from this talk, this is it. A ping is saved first. The live stream is a reader of that save. Retries are safe because of `eventId`. A vendor with a flaky connection can POST the same ping twice and operations won't see the car jump. When I demo, I'll say the marker is moving because this path ran, not because the front end is interpolating a fake route.
--->
+### 2.4 How you would handle scale (100+ concurrent trips)
 
----
+**Current capacity of the demo version**
 
-## 11. A hundred trips at once
+- 100 trips sending a ping every 5 seconds adds up to about 20 saves per second, or about 1.7 million rows per day. PostgreSQL handles this load comfortably with an index on trip and time.
+- 20 operations users each watching one trip means 20 open connections, which is a small load for one Node process.
+- The dashboard opens a live connection only for the trip being viewed, so a list of 100 trips does not open 100 connections.
 
-A hundred in-transit trips, pinging every 5 seconds, is about 20 writes a second and about 1.7 million rows a day. Postgres is comfortable there, with an index on `(trip_id, recorded_at, id)`.
+**Limits with a second app instance**
 
-Twenty operations users each watching one trip is twenty SSE connections. That's fine on one Node process.
+- The database listener runs inside one process. Users connected to another instance would not get live updates until they reconnect.
+- Running simulations are held in the memory of the process that started them.
 
-A wallboard of a hundred trips is a different shape. Today I only stream the trip you have open, so we don't open a hundred streams for one screen.
-
-What doesn't hold up if we start a second replica today:
-
-- The `LISTEN` client lives on one process
-- The simulator timers live in a map in memory
-- `NOTIFY` isn't stored, which we already accept because replay covers a missed wake-up on one instance
-
-How I would grow it:
+### 2.4 How you would handle scale (100+ concurrent trips)
 
 ```mermaid
-flowchart TB
-  Ingest[Location POST] --> PG[(PostgreSQL, still the record)]
-  Ingest --> Bus[Redis Pub/Sub, NATS, or Google Pub/Sub]
-  Bus --> R1[Replica 1 SSE]
-  Bus --> R2[Replica 2 SSE]
-  PG --> R1
-  PG --> R2
-  Sim[Simulator worker] --> Ingest
+flowchart LR
+  Ingest["Location API"] --> PG[("PostgreSQL<br/>stores every ping")]
+  Ingest --> Bus["Message bus<br/>(Google Pub/Sub or Redis)"]
+  Bus --> R1["App instance 1<br/>SSE connections"]
+  Bus --> R2["App instance 2<br/>SSE connections"]
+  R1 -. "Load missed pings" .-> PG
+  R2 -. "Load missed pings" .-> PG
+  Sim["Simulator worker"] --> Ingest
 ```
 
-Keep Postgres as the source of truth. Publish the wake-up to a bus. Each replica fans out to its own SSE clients. Move the simulator to a worker so only one place owns the clock. Archive old positions when history is measured in months.
+### 2.4 How you would handle scale (100+ concurrent trips)
 
-I wouldn't bring in Kafka for a hundred trips. I'd add a bus when I add a second instance. Until then, one GKE pod with `/api/health` as the probe is enough.
+**Proposed changes for more than one instance**
 
-<!--
-**Talking track**
+- PostgreSQL continues to store every ping.
+- A message bus such as Google Pub/Sub or Redis takes over from the database notification. Every instance receives every new ping and pushes it to its own connected users.
+- The simulator moves to a separate worker, so each simulation runs in one place.
+- Old location pings are archived once the history covers many months.
 
-The brief asked about a hundred concurrent trips, so I did the arithmetic. Twenty writes a second is easy for Postgres. The part I worry about is open SSE connections, plus the LISTEN client and simulator timers that live in one process. I already documented that two containers would split the simulator and could miss a live notify. Reconnect would fill the gap from the table, and the marker would look jumpy. So the production story is: one replica until we have a bus, then two.
--->
+Kafka would be more than this volume needs. Until a second instance is required, a single instance with a health check is enough.
 
----
+## 3. Integration & Middleware Proposal
 
-## 12. API contract
+### 3.1 API contract design
 
-```text
-POST   /api/trips
-GET    /api/trips?status=&vendorId=&driverId=
-GET    /api/trips/:id
-PATCH  /api/trips/:id          { status } or { driverId }
-POST   /api/trips/:id/location { lat, lng, timestamp, speed?, eventId? }
-GET    /api/trips/:id/positions
-GET    /api/trips/:id/events   text/event-stream
-POST   /api/trips/:id/simulation
-```
+| Method and path | What it does |
+| --- | --- |
+| `POST /api/trips` | Create a trip |
+| `GET /api/trips` | List trips, filtered by status, vendor or driver |
+| `GET /api/trips/:id` | Get a single trip and its current status |
+| `PATCH /api/trips/:id` | Assign a driver, or change the status (start, complete, cancel) |
+| `POST /api/trips/:id/location` | Send a location ping |
+| `GET /api/trips/:id/positions` | Get the recent location pings for a trip |
+| `GET /api/trips/:id/events` | Live stream of new pings for one trip |
+| `GET /api/trips/events` | Live stream of changes to the trip list |
+| `GET, POST, DELETE /api/trips/:id/simulation` | Check, start or stop a simulation |
 
-Lookups for the forms: customers, vehicles, vendors, drivers. Maps link resolve. Health check.
+There are also a few supporting endpoints. They return the customers, vehicles, vendors and drivers used in the forms, convert a Google Maps link into coordinates, and report whether the app can reach the database (health check).
 
-Errors look like this, with a stable `code` a vendor app can branch on:
+### 3.1 API contract design
+
+**Request example: send a location ping**
 
 ```json
-{ "error": { "code": "DRIVER_NOT_ASSIGNED", "message": "...", "details": {} } }
+{
+  "lat": 25.2048,
+  "lng": 55.2708,
+  "timestamp": "2026-09-10T18:00:00Z",
+  "speed": 12.5,
+  "eventId": "vendor-message-123"
+}
 ```
 
-The assignment API has no `/v1` prefix. For a vendor-facing API I would put it behind Apigee as `/api/v1`, only add fields inside a version, and cut a v2 if we ever break something. Webhook payloads would get their own version, CloudEvents is a simple choice. OpenAPI would come from the Zod schemas we already have.
+**Error response format**
 
-<!--
-**Talking track**
+All errors use the same format. Error codes stay the same between releases, so a vendor's app can rely on them.
 
-The three endpoints in the brief weren't enough to drive the screens, so the list grew. The error codes are the part I'd keep stable: `TRIP_NOT_IN_TRANSIT`, `CONCURRENT_MODIFICATION`, `DRIVER_NOT_ASSIGNED`. Versioning can wait until a real vendor is integrating. I wouldn't ship them an unversioned URL.
--->
+```json
+{ "error": { "code": "DRIVER_NOT_ASSIGNED", "message": "A driver must be assigned before the trip can start.", "details": {} } }
+```
 
----
+**Versioning strategy (proposed)**
 
-## 13. Events and AWR's other systems
+- Vendor-facing APIs are published through Apigee under `/api/v1`.
+- Within a version, fields can be added but are never removed or renamed.
+- A breaking change is released as `/api/v2`, and both versions run side by side while vendors move over.
+- The OpenAPI documentation is generated from the existing Zod schemas, so it stays in line with the code.
 
-I wouldn't send SMS from the trip `PATCH` handler. I'd emit an event and let other systems subscribe.
+### 3.2 Webhook or event-driven approach for notifying downstream systems
 
 ```mermaid
 flowchart LR
-  App[Trip and location APIs] --> Bus[Event bus]
-  Bus --> Dash[Dashboard SSE]
-  Bus --> Alerts[Alert worker]
-  Bus --> Notify[SMS / WhatsApp]
-  Bus --> CRM[CRM / ERP]
-  Bus --> BQ[BigQuery]
+  App["Trip and location APIs"] --> Bus["Event bus"]
+  Bus --> Dash["Dashboard live updates"]
+  Bus --> Alerts["Alert service"]
+  Bus --> Notify["Customer SMS<br/>and WhatsApp"]
+  Bus --> CRM["CRM and ERP"]
+  Bus --> BQ["BigQuery"]
 ```
 
-| Event | When | Who might listen |
+### 3.2 Webhook or event-driven approach for notifying downstream systems
+
+The API publishes an event whenever something happens to a trip, and each downstream system subscribes to the events it needs. If the API called the SMS provider directly, a slow or failed SMS request could delay or break the trip start.
+
+| Event | When it is published | Who would use it |
 | --- | --- | --- |
-| `trip.created` | Operations creates | Vendor portal |
-| `trip.driver_assigned` | Controller assigns | Driver app push |
-| `trip.started` | Status becomes in transit | Customer SMS, CRM, Subscribe Me or a service booking |
-| `trip.position` | Sampled, not every ping | Downstream analytics |
-| `trip.stale` / `trip.deviated` | Alert worker | Operations inbox, vendor SLA |
-| `trip.completed` / `trip.cancelled` | Terminal states | SMS, ERP job close, billing |
+| `trip.created` | Operations creates a trip | Vendor systems |
+| `trip.driver_assigned` | The controller assigns a driver | Driver app notification |
+| `trip.started` | The trip goes in transit | Customer SMS, CRM |
+| `trip.position` | A sample of pings, not every ping | Analytics |
+| `trip.stale`, `trip.deviated` | The alert service detects a problem | Operations, vendor SLA reports |
+| `trip.completed`, `trip.cancelled` | The trip ends | Customer SMS, ERP job closure, billing |
 
-I haven't been given AWR's internal system names. Publicly, the group already runs automotive journeys through CRM and ERP, uses Apigee for APIs, and uses BigQuery as a data lake. I'd map the real names in week one.
+External systems that cannot subscribe to the bus receive the same events as webhooks. Each webhook is signed so the receiver can check that it came from AWR, and failed deliveries are retried.
 
-| Platform | How this app would meet it |
+### 3.3 Middleware layer considerations
+
+**Already in the demo version**
+
+- Requests that change data are validated with Zod.
+- All errors use one format.
+- When a request breaks a database rule, the API returns a specific error (409 Conflict or 422 Unprocessable) with a clear code, in place of a generic server error.
+
+**Proposed in the app**
+
+| Area | Approach |
 | --- | --- |
-| Apigee | The URL vendors see: keys, quotas, TLS |
-| Dealer CRM / DMS | Where the job starts: service loaner, delivery, subscription |
-| ERP | Close the vendor job and cost it |
-| Customer comms | Start and arrive messages, through a notifications service |
-| BigQuery and Dataflow | Trip and position facts for SLA |
-| Vendor systems | They POST GPS to us |
+| Authentication | Check the user's token or the device's API key on every request |
+| Request validation | Keep Zod validation on every request |
+| Duplicate requests | Location pings already use an event ID. Trip creation would accept an `Idempotency-Key` header |
+| Logging | JSON logs with a request ID, trip ID and vendor ID. Exact coordinates are left out of normal logs |
+| Rate limiting | Limit each vendor key on the location API, for example to one ping per second with a small burst allowance |
 
-<!--
-**Talking track**
+### 3.3 Middleware layer considerations
 
-The SMS example in the brief is a good one, and the failure mode is calling a messaging vendor from inside our status change. I'd publish `trip.started` and let a notifications service do the rest. Same for CRM. GIT already has Apigee and BigQuery, so I'd use those. I don't want a second reporting path sitting beside them. I want to be upfront that the system names here are inferred from what's public. I'm happy to redraw this once I have the real catalogue.
--->
+**Proposed at the API gateway (Apigee)**
 
----
+HTTPS, API key checks, usage quotas, separate API products for vendors and AWR staff, and reports on failed requests.
 
-## 14. Middleware
+A rate limit inside the app works only while there is one instance. Once there are more, Apigee enforces the limit and the app keeps a basic check as a fallback.
 
-Two layers. Things the app should do, and things the group gateway should do.
+### 3.4 How the system could integrate with AWR's existing operational platforms
 
-**In the repo today:** Zod on every write, one error shape, Postgres unique and foreign-key errors mapped to 409 and 422. No auth, no rate limit, no request id, `console.error` on 500s.
+AWR's internal system names were not available, so these assumptions were made from public information:
 
-**In the app I would add:**
+- Customer journeys are managed in a CRM and a dealer management system.
+- Vendor jobs are closed and costed in an ERP.
+- APIs are published through Apigee.
+- Group data is stored in BigQuery.
 
-| Concern | Approach |
+| Platform | How the tracking system would connect to it |
 | --- | --- |
-| Auth | Check a JWT or API key |
-| Validation | Keep Zod where it is |
-| Idempotency | Already on location; add `Idempotency-Key` on create |
-| Logging | JSON logs with a request id, trip id, vendor id. No raw coordinates at info level |
-| Rate limit | Per vendor key on `/location`, something like 1 per second with a small burst |
+| Apigee | Publishes the location API to vendors, with keys, quotas and HTTPS |
+| CRM or dealer management system | Creates trips automatically, for example for a service pickup or a new car delivery |
+| ERP | Receives `trip.completed` to close and cost the vendor job |
+| Customer notifications service | Receives `trip.started` and `trip.completed` to send SMS or WhatsApp messages |
+| BigQuery | Receives trip and location data for SLA reporting |
+| Vendor systems | Send GPS pings to the location API |
 
-**On Apigee:** TLS, key checks, quotas, separate products for vendors and AWR staff, PII rules, analytics on ingest errors.
+## 4. Architecture Improvement Proposals
 
-A rate limit only inside Next.js is fine while we have one instance. At group scale I'd put it on the gateway and still check in the app.
+### 4.1 Moving to an event-driven architecture
 
-<!--
-**Talking track**
+```mermaid
+flowchart LR
+  API["Location API"] --> PG[("PostgreSQL")]
+  API --> Q["Message queue<br/>location.recorded"]
+  Q --> SSE["Dashboard<br/>live updates"]
+  Q --> Geo["Geofence and<br/>alert service"]
+  Q --> BQ["BigQuery"]
+  Q --> WH["Webhooks to<br/>other systems"]
+```
 
-When the brief says middleware, I read two things: request hygiene, and the integration layer GIT already owns. Zod is the hygiene we have. Apigee is the layer I'd put in front of vendors. I wouldn't make Next.js the only place a quota lives.
--->
+### 4.1 Moving to an event-driven architecture
 
----
+After a ping is saved, the location API publishes a `location.recorded` event to a message queue. The dashboard, the alert service, BigQuery and the webhook sender each read from the queue separately.
 
-## 15. After this slice
+With this in place, a slow or failing consumer has no effect on the location API, and new consumers can be added without changing it. Every app instance also receives every update, which is needed once there is more than one instance.
 
-**Event-driven location path.** After we save the row, publish `location.recorded`. SSE, alerts, BigQuery, and webhooks all listen. I'd do this when we add a second instance, or when a second consumer shows up.
+This change is worth making when a second app instance or a second consumer of location data is added.
 
-**Geofencing.** A radius around pickup and drop-off, maybe 150 metres, and optional yard shapes. A worker on the position stream, not extra logic in the POST. I skipped PostGIS this week because we had no geofence. Circles can start with a distance check.
+### 4.2 Geofencing
 
-**Replay and route deviation.** We already have an append-only log, so replay is a slider over `trip_positions` plus the stored route. Deviation is how far a point sits from that line. Useful live, and later as a vendor score. The 50 metre drop-off hint is a small version of this.
+Geofencing raises an alert when a vehicle enters or leaves a defined area.
 
-**Running close to users.** People using this are in the UAE. GKE and Cloud SQL should live in a nearby region, with Cloud CDN in front of static assets. I wouldn't multi-master Postgres for GPS pings. Edge belongs on tiles and JavaScript.
+- Each trip gets a circular zone around the pickup and drop-off points, for example with a 150-metre radius. Yards and service centres can have custom shapes.
+- A separate service reads new pings from the queue and checks them against the trip's zones, so the location API does not slow down.
+- The service raises events such as `trip.arrived_pickup`, `trip.left_pickup` and `trip.arrived_dropoff`.
+- Circular zones only need a distance calculation. PostGIS can be added when custom shapes are introduced.
 
-<!--
-**Talking track**
+The same zones could be used to complete a trip automatically at the drop-off point and to send the customer an arrival message.
 
-These are the four the brief asked for, and they're all natural extensions of what we already store. The geofence and the replay both want the position log we have. The event bus is the same move I described for a second replica. Multi-region, for this product, is mostly “put the database near Dubai,” not a global write path.
--->
+### 4.3 Historical trip replay and route deviation detection
 
----
+**Trip replay**
 
-## 16. Performance
+Every ping is already stored in order, together with the planned route. Replay would add a timeline slider to a completed trip that moves the marker through the stored pings. Operations could use it when looking into a customer complaint or a dispute with a vendor.
 
-**Map updates.** One Mapbox instance, route fetched once, bounds fitted once, marker updated on each ping. Reduced motion is respected. Right now the marker is recreated when the trip object changes. That's fine at one ping every 5 seconds. If we ever took a ping a second, I'd move the existing marker and maybe interpolate so it doesn't jump. I wouldn't refit bounds on every ping. The ping list is already capped at 100.
+**Route deviation detection**
 
-**Batching and streaming.** Ingest stays one ping per POST. Vendors already have an outbox, and batching on the way in hides stale data. The dashboard gets one SSE event per saved row. If a vendor ever sent a ping every second, I'd thin that out for the map and still keep every row in the table. SMS and CRM should get samples.
+The system measures the distance between each ping and the planned route. If the vehicle stays further away than a set limit (for example 500 metres) for longer than a set time, a `trip.deviated` alert is raised.
 
-**CDN.** JS, CSS, and Mapbox tiles can be cached. The HTML for a trip page is personal, so I wouldn't cache that at the CDN. Cloud CDN in front of `_next` assets, and Mapbox already CDNs tiles. The Mapbox token is public and should stay URL-restricted.
+After the trip, the same measurement can show how closely each vendor's drivers follow planned routes. The demo version already does a basic form of this check when it labels the actual drop-off point.
 
-**Server render vs client render.** The pages are thin Server Components. The dashboard loads data in the browser, because auth is in `localStorage` today. The live map should stay on the client. After real auth, I'd render the trip header on the server so the first paint has a vehicle and a status, then stream positions in the browser. I wouldn't wait on a hundred pings before showing the page.
+### 4.4 Multi-region or edge deployment for lower latency
 
-Indexes we already have: `(trip_id, recorded_at, id)` for the timeline, `(status, updated_at)` for the queue, partial uniques for occupancy. Latest ping per trip uses `DISTINCT ON`. I'd partition the log by month if it got huge. PostGIS can wait until geofencing is real.
+The users are in the UAE, so the biggest improvement comes from running the app and database in a Google Cloud region close to the UAE.
 
-<!--
-**Talking track**
+- Static files such as JavaScript, CSS and images are served through Cloud CDN. Mapbox serves map tiles from its own global network.
+- A single primary database with a read replica is enough. Users are in one country, so writing to databases in several regions is not needed.
+- If AWR operates this system in other countries later, each country can have its own deployment, which also keeps location data inside that country.
 
-Most of the performance work in week one was about not doing extra work: one map, one route fetch, a cap on the ping list, SSE only for the open trip. The marker recreate is a known rough edge. You won't see it at the demo pace. I'd tidy it before anyone ran a 1-second simulator in a meeting.
--->
+## 5. Performance Optimizations
 
----
+### 5.1 Map rendering performance with frequent marker updates
 
-## 17. Authentication
+**In the demo version**
 
-Three kinds of identity. I wouldn't reuse one token for all of them.
+- The map is created once and reused.
+- The driving route is fetched once per trip, and the map zooms to fit the route once, not on every ping.
+- The ping log shows at most the latest 100 entries.
+- Map animations are turned off for users who have reduced motion enabled.
 
-| Who | What they are | How I'd authenticate |
+**Proposed improvement**
+
+The map markers are currently removed and drawn again each time the trip data changes. At one ping every 5 seconds this is not noticeable. For faster updates, the vehicle marker would be moved to its new position with a short animation, so it glides between points.
+
+### 5.2 Batching vs streaming location payloads
+
+Drivers send pings one at a time as they are recorded, so operations sees the latest position straight away. Pings are sent in a batch only after the device has been offline, when the queued pings are sent together.
+
+The server streams each saved ping to the dashboard as soon as it is saved. If a vendor sent a ping every second, the dashboard could receive a reduced stream, for example one update every 2 to 3 seconds, while every ping is still stored in the database.
+
+SMS, CRM and analytics systems receive trip events and a sample of pings, not every ping.
+
+### 5.3 CDN and asset caching strategy for the web dashboard
+
+| Content | Caching approach |
+| --- | --- |
+| JavaScript, CSS and fonts | Served through Cloud CDN and cached for a long time. File names change with each release, so users get new files after a deployment |
+| Map tiles | Served and cached by Mapbox's own network |
+| Pages and API responses | Not cached, because they contain live and user-specific data |
+| Live updates (SSE) | Never cached. The `X-Accel-Buffering: no` header stops proxies from holding updates back |
+
+The Mapbox access token can be seen in the browser, so it is restricted to AWR's domains.
+
+### 5.4 Database indexing strategy for location records
+
+**Indexes in the demo version**
+
+- Location pings are indexed by trip and time, so a trip's timeline and latest position load quickly.
+- Trips are indexed by status and last update time, so the trip list loads quickly.
+- Partial unique indexes enforce one live trip per driver and one active trip per vehicle.
+- Event IDs are unique per trip, so the database rejects duplicate pings.
+
+**Proposed as data grows**
+
+- Split the location table by month, so older months can be archived or deleted easily.
+- Add PostGIS spatial indexes when geofencing with custom shapes is introduced.
+
+### 5.5 Connection management for WebSocket at scale
+
+The demo version uses SSE, and the same concerns apply.
+
+- Each dashboard opens one live connection for the trip being viewed and one for the trip list.
+- A heartbeat every 15 seconds stops proxies from closing connections that look idle.
+- The browser reconnects by itself after a drop, and missed pings are loaded from the database.
+- When a user closes the page, the server stops sending to that connection and removes it.
+- At larger scale, HTTP/2 lets many streams share one connection, and a message bus lets any app instance serve any user (see 2.4).
+
+### 5.6 Server-side rendering vs client-side rendering trade-offs in Next.js
+
+**In the demo version**
+
+The pages are light server components, and data is loaded in the browser. The demo login is stored in the browser, so the server cannot tell who the user is when it renders a page.
+
+**Proposed once real login is in place**
+
+| Part of the page | Where it is rendered | Reason |
 | --- | --- | --- |
-| AWR operations and admin | Employees | Sign in with AWR's identity provider, Workspace or Entra. Short-lived access token, refresh, session in an httpOnly cookie |
-| Vendor controller | 3PL staff | Their own tenant, same kind of sign-in, `vendor_id` in the token |
-| Driver phone | Something posting GPS | A device token or vendor ingest key, scoped to that driver and trip. Not the dashboard cookie |
+| Trip header (vehicle, customer, status, driver) | Server | Shows useful content as soon as the page loads |
+| First page of the trip list | Server | Shows useful content as soon as the page loads |
+| Live map, ping log and live connection | Browser | Changes every few seconds and relies on browser features |
 
-People on the dashboard: Authorization Code with PKCE. Next.js holds the refresh token, and then the server can render the right workspace.
+The trip details appear first, and the location history loads and streams in afterwards.
 
-Ingest from a device: `Authorization: Bearer <device_token>`, short-lived and rotatable. If a vendor server posts on the driver's behalf, mTLS is an option.
+## 6. Security
 
-SSE is awkward because `EventSource` can't set a custom header. A cookie session is cleaner than putting a token in the query string.
+### 6.1 Authentication (who are you?)
 
-The simulator shouldn't be on a public vendor key in production. I'd turn it off, or make it admin-only and audited.
+Each type of user signs in differently.
 
-Webhooks we send go through Apigee credentials. Webhooks we receive get a signature check.
+| User | Who they are | Proposed sign-in method |
+| --- | --- | --- |
+| AWR Operations and Admin | AWR employees | Sign in through AWR's company identity provider using OAuth2 (Authorization Code with PKCE). The session is kept in a secure, HTTP-only cookie |
+| Vendor Controller | Vendor staff | Same sign-in method, with each vendor set up separately. The vendor ID is included in the user's token |
+| Driver's device | A phone or vendor system sending GPS | A short-lived device token or vendor API key, limited to that driver and their trips. Tokens can be rotated |
 
-<!--
-**Talking track**
+**Device keys**
 
-The login screen you saw is a demo switcher. I left the APIs open because a JWT sitting on top of that would look finished and wouldn't be. For production I care most about this split: a person watching a map, and a device publishing GPS, are different. If we use the dashboard cookie on ingest, we've mixed those up. SSE would ride the cookie session so we don't leak tokens in query logs.
--->
+A device only needs permission to send pings for its own trips, so it gets its own key and does not use the dashboard login. If a phone is lost, its key can be revoked without affecting anyone's dashboard access.
 
----
+**Live connections**
 
-## 18. Authorization
+The browser's built-in SSE client cannot add custom headers, so the live connection uses the same secure cookie as the rest of the dashboard. Tokens are kept out of URLs, where they would end up in logs.
 
-This matrix is only in the UI today. In production it has to be checked in the handler.
+**Simulator**
 
-| Action | Driver | Vendor controller | AWR operations | Admin |
+The simulator is turned off in production, or limited to admins with each use recorded.
+
+### 6.2 Authorization (what can you do?)
+
+The server checks every request against the user's role and the vendor or driver named in their token.
+
+| Action | Vendor Driver | Vendor Controller | AWR Operations | Admin |
 | --- | --- | --- | --- | --- |
-| Create trip | | | Yes | Yes |
-| Assign driver | | Own vendor, created trips | View | Override, audited |
-| Start, complete, simulate | Own assigned trip | | | Break-glass |
-| Post location | Own in-transit trip | | | |
-| Cancel | | | Yes | Yes |
-| List trips | Own | Own vendor | All | All |
-| Watch map and pings | Own | Own vendor | All | All |
-| Master data, API keys, SLA | | Read own drivers | Read | Write |
-| Replay / export | | Own vendor, limited | Yes | Yes |
+| Create a trip | No | No | Yes | Yes |
+| Assign a driver | No | Own vendor's trips | View only | Yes, recorded in the audit log |
+| Start, complete or simulate | Own assigned trips | No | No | Emergency use only |
+| Send location | Own in-transit trip | No | No | No |
+| Cancel a trip | No | No | Yes | Yes |
+| View trips and live map | Own trips | Own vendor's trips | All | All |
+| Manage master data, API keys and SLAs | No | View own drivers | View | Yes |
+| Replay and export history | No | Own vendor's trips | Yes | Yes |
 
-`canAccessTrip` already has this scoping in the browser: operations sees everything, a controller stays in their vendor, a driver stays on their own trips. Production would return 401 with no token, and 403 if the token's vendor or driver doesn't match.
+The demo version applies these rules in the browser only. In production the server runs the same checks. A request without a valid login gets 401 Unauthorized, and a request for another vendor's or driver's trip gets 403 Forbidden.
 
-Operations runs the desk. Admin configures the system. Watching a live coordinate is closer to customer private data than reading a trip number, so I'd log those views.
+A vehicle's live location is sensitive, so each time someone views it, the view is recorded in an audit log.
 
-<!--
-**Talking track**
+### 6.3 Data in transit
 
-Being logged in isn't a pass to every trip. A Crescent Dune controller shouldn't open another vendor's job, and a driver shouldn't see a colleague's live map. We already behave that way in the UI. The work left is doing the same check on the server, which is why this slide exists even though the APIs are open this week.
--->
+- All traffic to the dashboard and APIs uses HTTPS (TLS 1.2 or higher), and HTTP requests are redirected to HTTPS.
+- The SSE stream runs over the same HTTPS connection. If WebSockets are added for drivers later, they use secure WebSockets (WSS).
+- The app connects to the database over an encrypted connection inside a private network.
+- Tokens are never put in URLs, so they do not show up in server or proxy logs.
 
----
+### 6.4 Data at rest
 
-## 19. Data in transit, at rest, and abuse
+- Cloud SQL encrypts the database, its backups and its replicas. AWR can manage the encryption keys if required.
+- Coordinates are not encrypted field by field, because the system needs to query them to draw maps and calculate distances. Access to the database is restricted instead.
+- Only the app's service account can read location data. Staff access to the database is limited and logged.
+- Detailed location history is kept for a fixed period, for example 90 days, and then deleted or kept only as summaries.
+- Customer contact details have the same access controls, and exact coordinates are left out of normal application logs.
 
-**In transit.** HTTPS for the dashboard and the API. SSE then rides on that. If we add sockets for drivers later, those would be WSS. Keep tokens out of query logs. Keep the Mapbox token URL-restricted.
+### 6.5 API abuse prevention
 
-**At rest.** Cloud SQL encryption at rest, and customer-managed keys if GIT wants that. Encrypting every lat/lng in the application makes queries painful, so I wouldn't do that in v1. I would encrypt backups, limit who can `SELECT` positions, and keep hot data for something like 90 days. Customer email and phone are already in `customers`, so the same disk encryption and tight database roles apply. No coordinates in info logs.
+The location API receives traffic from outside AWR, which makes it the most exposed part of the system.
 
-**Abuse**
-
-| Control | What it does |
+| Control | What it protects against |
 | --- | --- |
-| Schema and Zod | Bad coordinates and timestamps never get in |
-| `eventId` | A retry is not a second ping |
-| Rate limit per device | 1 Hz is already a lot for a car |
-| Trip must be in transit | You can't flood a scheduled job |
-| Anomaly checks | Silly speeds, huge jumps, bursts of 401s |
-| Occupancy and version | Stops two live jobs on one driver |
+| Input validation | Invalid coordinates, timestamps and speeds are rejected before they reach the database (in the demo version) |
+| Unique event IDs | A retried ping is not saved twice (in the demo version) |
+| Trip must be in transit | Pings cannot be sent to a trip that has not started or has already ended (in the demo version) |
+| One live trip per driver | The same driver cannot be active on two trips (in the demo version) |
+| Rate limiting per device | A device or key cannot flood the API. About one ping per second is plenty for a vehicle |
+| Anomaly detection | Flags impossible speeds, sudden jumps in location, and repeated failed logins |
+| Device tokens and gateway quotas | Only registered devices can send pings |
 
-The location POST is the door that matters. Open like it is today, anyone who can hit the URL can move the marker. That's acceptable for the assignment. In production I want a gateway quota, a device token, and the in-transit check at minimum.
+## 7. Analytics
 
-<!--
-**Talking track**
+### 7.1 Operational metrics
 
-Live location of a customer's car is sensitive enough that I'd treat access as a privilege. I'm not reaching for field-level encryption in the first production cut, because we still need to query and map those points. Disk encryption, short retention, and an audit of who watched is the set I'd actually ship. The other half is boring and important: validate input, cap the rate, ignore duplicate event ids.
--->
+| Metric | How it is calculated |
+| --- | --- |
+| Trip duration | Time from trip start to trip completion, compared with the planned time |
+| Average speed | Average and 95th percentile speed from the location pings |
+| Delay frequency | Share of trips that started late or arrived later than the route estimate |
+| Route efficiency | Distance actually driven compared with the planned route distance |
+| Tracking quality | Number of trips where the location went quiet or the drop-off point did not match |
 
----
+### 7.2 System health
 
-## 20. Analytics
+| Metric | What it shows |
+| --- | --- |
+| API response time (95th percentile) | Whether the location API is slowing down |
+| Error rate by error code | Whether vendors are sending bad data or the system is failing |
+| Ping delay (time received minus time recorded) | Whether drivers are losing signal or pings are arriving late |
+| Live connection stability | Number of open connections, reconnects and dropped connections |
+| Uptime | Results of the health check endpoint |
 
-Three kinds of numbers. I'd land them in BigQuery, which AWR already uses as a group warehouse.
+### 7.3 Business metrics
 
-**Operational**
+| Metric | What it shows |
+| --- | --- |
+| SLA compliance per vendor | Share of trips that met the agreed pickup and drop-off times |
+| On-time pickup and drop-off rate | How reliable each vendor is |
+| Route deviation rate per vendor | How often drivers leave the planned route |
+| Trip volume by vendor, brand and emirate | Where more vendor capacity is needed |
+| Cost per completed trip | Vendor cost, once the ERP is connected |
 
-- Trip duration against the scheduled window
-- Average and p95 speed
-- Started late, or last mile slower than the route ETA
-- Driven distance against the planned Mapbox distance
-- Stale pings and drop-off mismatches
+### 7.4 Tools
 
-**System health**
-
-- Ingest delay: `received_at` minus `recorded_at`
-- API p95 and errors by code
-- SSE connects, reconnects, drops, missed heartbeats
-- Simulator only in non-prod
-
-**Business**
-
-- SLA per vendor: on-time pick-up, on-time drop-off, deviation rate
-- Volume by vendor, brand, emirate
-- Cost per completed trip once ERP is connected
-
-| Layer | Tool | Why that one |
+| Purpose | Tool | Reason |
 | --- | --- | --- |
-| Warehouse | BigQuery | Group data already goes there |
-| Stream in | Dataflow or Pub/Sub into BigQuery | Facts about trips, not a ping-by-ping UI |
-| Ops BI | Looker or Looker Studio | SLA scorecards |
-| App health | Cloud Operations and `/api/health` | Latency, errors, SSE drops |
-| Product funnel | GA4 on the dashboard, optional | Create, assign, start. Mixpanel only if GIT already has it |
+| Data warehouse | BigQuery | AWR's group data is already stored there |
+| Loading data into the warehouse | Pub/Sub and Dataflow | Streams trip events into BigQuery without adding load to the app |
+| Operational and business dashboards | Looker or Looker Studio | Vendor SLA scorecards and operations reports |
+| System health | Google Cloud Monitoring and Logging | Response times, errors and dropped connections, with alerts |
+| Product usage | Google Analytics 4 (optional) | How the dashboard is used, for example how long it takes to create and assign a trip |
 
-<!--
-**Talking track**
+Mixpanel or a similar product analytics tool is not needed at the start. It can be added later if AWR already uses it elsewhere.
 
-The numbers that matter here are operational and vendor SLA. I'd start in BigQuery and Looker because that's already how AWR looks at group data. I wouldn't stand up a separate product-analytics stack first. Mixpanel is on the brief's example list, and I'd only pick it if you already use it.
--->
+## 8. Testing Strategy
 
----
+### Approach by layer
 
-## 21. Testing
-
-| Layer | What the brief asked | What I ran | What I'd add |
+| Layer | Approach | Covered in the demo version | Proposed next |
 | --- | --- | --- | --- |
-| Unit | State machine, validation, coordinates | Vitest for transitions, driver gaps, contracts, geometry, outbox, roles | Keep going |
-| Integration | API and SSE lifecycle | Testcontainers Postgres: constraints, idempotency, `LISTEN` / `NOTIFY` | A real HTTP run against a live server |
-| Component | React Testing Library | Not much yet | Queue, assignment, stream status |
-| E2E | Playwright, happy path and marker | Not yet | Login, assign, simulate, see a ping and the marker |
-| Performance | k6 or Artillery on ingest | Not yet | Around 20 requests/s ingest and 50 SSE clients, nightly |
+| Unit tests | Core business logic | Trip status changes, driver availability rules, request validation, route and distance calculations, the offline ping queue, and role access | Add tests with each new feature |
+| Integration tests | API routes and the live connection lifecycle | API handler tests, and tests against a real PostgreSQL database (using Testcontainers) for database rules, duplicate pings and database notifications | HTTP tests against a running server |
+| Component tests | UI components with React Testing Library | Not covered yet | Trip list, driver assignment and live connection status |
+| E2E tests | Playwright: trip simulation and live map update | Not covered yet | Sign in, assign a driver, run a simulation, and check that a new ping moves the map marker |
+| Performance tests | Load test of the location API (k6 or Artillery) | Not covered yet | Around 20 pings per second with 50 open live connections, run nightly |
 
-Every PR already has a path for `lint`, `typecheck`, `test`, and `build`. Integration tests need Docker.
+### Approach by layer
 
-<!--
-**Talking track**
+**Focus of the current tests**
 
-I spent the testing time on the bugs that go quiet: occupancy indexes, duplicate `eventId`, the notify payload, seed schedule gaps. Playwright and k6 are the right next gates before a real phone points at this. I don't have those in the repo, and I don't want to imply I do.
--->
+Most of the current tests cover issues that are hard to spot by using the app, such as a driver being put on two trips at once or a ping being saved twice after a retry.
 
----
+**When each type of test runs**
 
-## 22. Where I would run this
+- Every pull request runs lint, type checks, unit tests and a production build. These commands already exist in the project.
+- Integration tests need Docker, so the CI pipeline runs them in an environment where Docker is available.
+- End-to-end tests run against a preview environment before changes reach staging.
+- Performance tests run nightly against staging, so they do not slow down pull requests.
 
-AWR already runs digital products on Google Cloud: GKE, Cloud SQL, Cloud CDN, Cloud Operations, Apigee, BigQuery. I would put this there.
+## 9. Deployment Strategy
 
-| Option | How I see it |
+### 9.1 Hosting platform for Next.js
+
+AWR already runs digital products on Google Cloud, so the proposal is to host this system there too.
+
+| Option | Assessment |
 | --- | --- |
-| Vercel | Excellent Next.js experience. Awkward for long-lived SSE, `LISTEN`, and the simulator timer. Also another platform for GIT to operate. |
-| AWS | Fine technically. Extra operational cost if the group already lives on GCP. |
-| GKE and Cloud SQL | Matches the estate you already have. |
+| Vercel | Very good Next.js support. Its functions are short-lived, though, so long-running live connections, the database listener and the simulator would need to run somewhere else. It would also be one more platform to manage |
+| AWS | Would work technically, but adds cost and effort if AWR's other platforms are on Google Cloud |
+| Google Cloud (GKE and Cloud SQL) | Supports long-running processes and uses platforms AWR already has |
 
-```mermaid
-flowchart TB
-  Client[Vendor and browser] --> Apigee[Apigee: TLS, keys, quota]
-  Client --> CDN[Cloud CDN]
-  CDN --> Assets[Static dashboard assets]
-  Apigee --> GKE[GKE: Next.js standalone]
-  GKE --> SQL[(Cloud SQL Postgres)]
-  GKE --> PubSub[Pub/Sub, once we have more than one replica]
-  GKE --> BQ[BigQuery]
-```
+Cloud Run could also work, as long as at least one instance is always running and the simulator runs in a separate worker. Without those two changes, idle instances would shut down and drop live connections.
 
-Docker Compose with a long-lived Node process is basically a GKE Deployment. I wouldn't put this on Cloud Run with scale-to-zero, because the stream and the simulator would go away. Cloud Run with a minimum of one instance and session affinity is a fallback if GIT strongly prefers that shape, after the simulator has left this process.
-
-Local Compose seeds data and uses a demo database password. Production shouldn't seed, shouldn't reuse those passwords, and should take secrets from Secret Manager. More than one replica waits until the bus from the scale slide exists.
-
-<!--
-**Talking track**
-
-I know AWR has talked about serverless digital products, and that's a fair question. Request/response work fits Cloud Run well. This slice has sticky connections and an in-process clock, so I picked GKE, which you already run. I'm not trying to introduce Vercel into GIT's estate for a system that wants to stay up.
--->
-
----
-
-## 23. CI/CD and environments
+### 9.1 Hosting platform for Next.js
 
 ```mermaid
 flowchart LR
-  Feat[Feature branch] --> PR[PR checks]
-  PR --> Main[main]
-  Main --> Staging[Staging]
-  Staging --> Prod[Production]
+  Users["Vendors and<br/>AWR staff"] --> CDN["Cloud CDN<br/>static files"]
+  Users --> Apigee["Apigee<br/>HTTPS, keys, quotas"]
+  Apigee --> GKE["GKE<br/>Next.js app"]
+  GKE --> SQL[("Cloud SQL<br/>PostgreSQL")]
+  GKE --> PubSub["Pub/Sub<br/>(when scaled out)"]
+  PubSub --> BQ["BigQuery"]
+  GKE --> SM["Secret Manager"]
 ```
 
-Short-lived branches into `main`. `main` should always be deployable. Tags for production releases.
+### 9.2 CI/CD pipeline design
 
-PR checks we can already run: lint, typecheck, tests, build. Later, a Playwright smoke on a preview, and a Terraform plan.
+```mermaid
+flowchart LR
+  Branch["Feature branch"] --> PR["Pull request<br/>lint, type check,<br/>tests, build"]
+  PR --> Main["Merge to main"]
+  Main --> Dev["Deploy to dev"]
+  Dev --> Staging["Deploy to staging<br/>E2E tests"]
+  Staging --> Prod["Deploy to production<br/>after approval"]
+```
 
-| Environment | Data | Who |
+### 9.2 CI/CD pipeline design
+
+**Branch strategy**
+
+Feature branches are kept short and merged into `main` through pull requests. `main` is kept ready to deploy at all times, and production releases are tagged.
+
+**Automated tests**
+
+Every pull request runs lint, type checks, unit and integration tests, and a production build. A Playwright test on a preview environment and a Terraform plan can be added later.
+
+**Staged rollout**
+
+Each release goes to dev first, then staging, then production. Production deployments need approval and are rolled out gradually. New features, such as extra location fields, are released behind feature flags so they can be turned off without a new deployment.
+
+With a single instance, a deployment briefly drops live connections. Browsers reconnect by themselves and load the pings they missed, so no data is lost. With two or more instances, a rolling update avoids the drop.
+
+### 9.3 Environment management
+
+| Environment | Data | Used by |
 | --- | --- | --- |
-| Local | Compose and seed | Engineers |
-| Dev | Shared GCP project, seed-like | Integration |
-| Staging | Prod-like, anonymized, no real customer GPS | GIT and operations UAT |
-| Production | Real vendors, tighter keys, no simulator UI | Restricted |
+| Local | Docker Compose with seed data | Engineers |
+| Dev | Shared Google Cloud project with test data | Engineers, for integration work |
+| Staging | Close to production, with anonymised data and no real customer locations | AWR IT and operations, for user acceptance testing |
+| Production | Real vendors and trips, stricter access, simulator turned off | Restricted access |
 
-A single-instance deploy may drop SSE for a moment. Clients reconnect and replay. Once we have two replicas and a bus, I'd do a rolling update. Feature flags for the simulator and for new ingest fields.
+- Each environment has its own Google Cloud project, database and API keys.
+- Secrets are stored in Secret Manager, not in code or Docker files.
+- Seed data and demo passwords are used only locally and in dev.
 
-<!--
-**Talking track**
+### 9.4 Monitoring & alerting
 
-This is ordinary GIT hygiene. The bit that's specific to this app is: a deploy with one replica will blink the live stream, and that's recoverable because of replay. I wouldn't pretend we have zero-downtime SSE until we have two pods.
--->
-
----
-
-## 24. Monitoring and infrastructure as code
-
-| Signal | Starting target |
-| --- | --- |
-| `/api/health` | 99.9% uptime |
-| Ingest p95 | Under 200 ms |
-| Ingest 5xx | Under 0.1% |
-| SSE unexpected closes | Alert if reconnects spike |
-| Stale in-transit trips | Product alert, and a system smell |
-| `CONCURRENT_MODIFICATION` | A spike is probably a bug |
-
-Cloud Operations for the platform, plus whatever GIT already uses for Next.js errors. `/api/health` stays a simple “can I talk to the database?” probe.
-
-Terraform for GKE, Cloud SQL, IAM, Secret Manager, the Apigee product, CDN, Pub/Sub, and alerts. The second environment shouldn't be click-ops. Pulumi is fine if the team is already on it. I'd default Terraform.
-
-<!--
-**Talking track**
-
-The health endpoint is already what Compose uses. I'd keep that as the probe and add a few product signals on top, especially stale trips and SSE reconnects. If reconnects spike, something in front of us is buffering or killing idle connections. That's happened to me on reverse proxies before, which is why `X-Accel-Buffering: no` is already on the stream.
--->
-
----
-
-## 25. What I would do with more time
-
-| This week | Next | Why I waited |
+| Signal | Starting threshold | Action when exceeded |
 | --- | --- | --- |
-| Demo login, open APIs | Real sign-in, device tokens, server-side roles | The brief allowed it, and a decorative JWT felt worse |
-| One process `LISTEN` | Pub/Sub or Redis | One instance was enough to prove the product |
-| Simulator map in memory | A worker | It's a demo feature |
-| Vitest and Testcontainers | Playwright and k6 | Quiet data bugs first |
-| No webhooks | `trip.started` and `trip.completed` | No real SMS or CRM to call |
-| Client-only dashboard, manual list refresh | List events, server-rendered header | The live map was the brief |
-| Unversioned `/api` | `/api/v1`, OpenAPI, Apigee | No external vendor yet |
-| Recreate the map marker | Move it | A 5 second interval hides the jump |
+| Uptime (health check) | 99.9% | Alert the on-call engineer |
+| Location API response time (95th percentile) | Under 200 ms | Alert if it stays above the threshold for 5 minutes |
+| Location API error rate | Under 0.1% | Alert the on-call engineer |
+| Live connection drop rate | Alert if reconnects rise sharply | Check proxies and load balancers for closed or buffered connections |
+| Trips with no recent location | Tracked as a product metric | Alert operations and check the vendor and the location API |
+| Conflicting trip updates | Expected to be rare | Investigate a sudden increase, as it usually points to a bug |
 
-<!--
-**Talking track**
+Google Cloud Monitoring and Logging cover the platform, and an error tracking tool covers the Next.js app. The `/api/health` endpoint is used for both the uptime check and the Kubernetes health check.
 
-I had seven days, so I spent them on a correct ingest path, a real trip state machine, and a simulator that uses both. Platform work like Apigee, Playwright, and a second replica is sequenced after that because the desk can't use those if the ping is wrong. That's the same order I'd use with a team.
--->
+### 9.5 Infrastructure as Code considerations
 
----
+All infrastructure is defined in Terraform and reviewed through pull requests in the same way as application code. This includes:
 
-## 26. How I would run this with a team
+- GKE cluster and app deployment
+- Cloud SQL database and backups
+- Access roles (IAM) and service accounts
+- Secret Manager
+- Apigee API products
+- Cloud CDN and load balancer
+- Pub/Sub topics
+- Monitoring alerts and dashboards
 
-Habits already in the repo:
+Dev, staging and production are then created from the same definitions, with no manual setup in the console.
 
-- Written decisions in `docs/technical-decisions.md`
-- Routes don't hide business rules
-- Zod at the edge, stable error codes
-- Tests around occupancy, retries, and replay
-- A README that comes up with one Compose command
+Terraform is the default choice because it is widely used and well supported on Google Cloud. Pulumi would also be fine if the team already uses it.
 
-Next 90 days, if this were going to production:
+## What would be done differently with more time
 
-1. Weeks 1–2: real auth, Apigee, a GCP project, simulator off in prod
-2. Weeks 3–4: stale and not-started alerts, live list updates, a Playwright happy path
-3. Month 2: events into notifications and BigQuery, a vendor SLA view
-4. Month 3: geofence, replay, a second replica and a bus
+### What would be done differently with more time
 
-Done means schema, API, UI, a test, and a short note if we said no to an obvious option.
+| In the demo version | With more time | Reason it was deferred |
+| --- | --- | --- |
+| Demo role switcher and open APIs | Real sign-in, device tokens and server-side access checks | The brief allows authentication to be covered in the presentation only |
+| Database notifications within one process | Message bus (Pub/Sub or Redis) | One instance was enough to run the full flow end to end |
+| Simulations held in the app's memory | A separate simulator worker | The simulator is a tool for demos and testing |
+| Unit and integration tests | Component, Playwright and k6 tests | The data rules and live update logic were tested first |
+| No downstream notifications | `trip.started` and `trip.completed` events and webhooks | There were no real SMS or CRM systems to connect to |
 
-Staffing I'd ask for: myself, one full-stack engineer, and some part-time GIT platform help for Apigee and GCP. A mobile engineer later if the vendor app grows. Someone on data once events are landing in BigQuery.
+### What would be done differently with more time
 
-<!--
-**Talking track**
-
-The README and the decision notes are how I'd like a team to work, not decoration for the assignment. New endpoints shouldn't appear without a test and a place in the API doc. I care about that more than about having every possible tool in week one.
--->
-
----
-
-## 27. Recap, then the app
-
-Three choices I keep coming back to:
-
-1. A ping is saved first, then the dashboard is told. Reconnect reads the table.
-2. SSE for people watching the map. WebSockets can wait for the driver phone.
-3. Postgres for this slice. A bus when we add a second replica. GKE because that's AWR, and because this process needs to stay up.
-
-I can show this on the running app next. The marker you'll see is coming through that location API.
-
-<!--
-**Talking track**
-
-I'll switch to the demo and keep it short: operations opens a scheduled trip, a driver starts a simulation, operations watches the same trip, and the pings show up with a simulator source. Happy to stop on any screen and go back to a diagram.
--->
-
----
-
-# Presenter appendix
-
-Not slides. For the live session.
-
-## Demo, about eight minutes
-
-Password is `password`. Two browsers is easier: Operations in one, Driver in the other. Reset first with `npm run db:seed -- --reset-db`.
-
-1. Operations at `/ops/trips`. About 20 scheduled jobs. Open `TRIP-DEMO-001`, AWR Showroom on Sheikh Zayed Road to Al Zahia, Sharjah. Scheduled, driver Bilal, empty ping log. Operations has no Start button.
-2. If there's time: New trip, paste a Google Maps link, pick a vendor.
-3. Controller for Crescent Dune. They only see their trips. They can reassign. They can't start.
-4. Driver Bilal. Simulate trip, 5 seconds and 1 km, faster if the room is restless.
-5. Operations on the same trip. Marker should follow the road. Pings show device time and source `simulator`. Stream says live.
-6. Let it finish, or end the trip. Mention auto-complete, and the actual drop-off label if it appears.
-7. Cancel a different scheduled trip as Operations.
-
-Line to say once: the marker is moving because the server posted through the same API a vendor phone would use.
-
-## Questions I expect
-
-**Why SSE?**
-The dashboard only listens, and the browser reconnects with `Last-Event-ID`. I'd use WebSockets on the driver phone later.
-
-**Why Postgres?**
-I wanted history, occupancy rules, and replay. Redis as a bus is still the plan for a second instance.
-
-**Why not Vercel?**
-Long-lived SSE, `LISTEN`, and the simulator timer. AWR already runs GKE.
-
-**Cloud Run?**
-Good for request/response. This workload wants to stay up. GKE first. Cloud Run with a minimum instance only after the simulator leaves this process.
-
-**Duplicate pings?**
-`eventId` is unique per trip. Second POST is 200 duplicate. No second row, no second notify.
-
-**SSE drops for 30 seconds?**
-Replay from the table. Notify isn't the log.
-
-**A thousand trips?**
-Writes are still fine. Add a bus, thin out a wallboard, archive old positions.
-
-**Where's admin?**
-Create is AWR, assign is the vendor. Admin later is master data, keys, SLA, audit.
-
-**Is location private?**
-Private enough. HTTPS, tight database access, short retention, audit who watched. I wouldn't encrypt each lat/lng in v1.
-
-**Why Mapbox?**
-One token for the map and the driving route the simulator follows. Leaflet would give a straight line on a road map. Google's JavaScript map would bill the live view.
-
-**Why are the APIs open?**
-The brief allowed it. The design is in the security slides.
-
-**Two containers today?**
-Simulations can split. A notify on instance A may not reach an SSE client on instance B until they reconnect. One replica until we have a bus.
+| In the demo version | With more time | Reason it was deferred |
+| --- | --- | --- |
+| Data loaded in the browser | Trip details rendered on the server | Needs real sign-in first |
+| API without a version number | `/api/v1` behind Apigee, with OpenAPI documentation | No external vendors were using the API yet |
+| Map markers redrawn on each update | Vehicle marker moved with a short animation | Not noticeable at one ping every 5 seconds |
+| No alerts | "Location has gone quiet" and "trip not started" alerts | The live tracking flow was built first |
+| No CI pipeline configured | CI pipeline running the existing lint, type check, test and build commands | Checks were run locally during development |
