@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { SimulationRequest } from "@/domain/contracts";
-import { ConflictError } from "@/domain/errors";
+import {
+  ConflictError,
+  InvalidStateTransitionError,
+} from "@/domain/errors";
 import { fetchDrivingRoute } from "@/lib/mapbox-route";
 import {
+  isSameLocation,
   sampleRoute,
   type LatLng,
 } from "@/lib/route-geometry";
@@ -33,6 +37,8 @@ type Simulation = {
   route: LatLng[];
   intervalMs: number;
   stepMeters: number;
+  dropoff: LatLng;
+  pendingCompletion: boolean;
 };
 
 export type SimulationStatus =
@@ -117,8 +123,12 @@ export class SimulatorService {
       route,
       intervalMs,
       stepMeters,
+      dropoff,
+      pendingCompletion: false,
       timer: setInterval(() => {
-        void this.tick(tripId).catch(() => this.stop(tripId));
+        void this.tick(tripId).catch((error) => {
+          this.handleTickError(tripId, error);
+        });
       }, intervalMs),
     };
     this.simulations.set(tripId, simulation);
@@ -187,10 +197,11 @@ export class SimulatorService {
     if (!simulation) {
       return;
     }
+
     const point = simulation.route[simulation.nextPoint];
-    if (!point) {
-      await this.trips.transition(tripId, "completed");
-      this.stop(tripId);
+    if (simulation.pendingCompletion || !point) {
+      simulation.pendingCompletion = true;
+      await this.finish(tripId);
       return;
     }
 
@@ -209,5 +220,35 @@ export class SimulatorService {
       "simulator",
     );
     simulation.nextPoint += 1;
+
+    if (
+      isSameLocation(point, simulation.dropoff) ||
+      simulation.nextPoint >= simulation.route.length
+    ) {
+      simulation.pendingCompletion = true;
+    }
+  }
+
+  private async finish(tripId: string) {
+    try {
+      await this.trips.transition(tripId, "completed");
+    } catch (error) {
+      if (error instanceof InvalidStateTransitionError) {
+        this.stop(tripId);
+        return;
+      }
+      throw error;
+    }
+    this.stop(tripId);
+  }
+
+  private handleTickError(tripId: string, error: unknown) {
+    const simulation = this.simulations.get(tripId);
+    if (simulation?.pendingCompletion) {
+      console.error(`Simulation could not complete trip ${tripId}`, error);
+      return;
+    }
+    console.error(`Simulation tick failed for trip ${tripId}`, error);
+    this.stop(tripId);
   }
 }

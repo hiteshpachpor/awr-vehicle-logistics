@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ConflictError } from "@/domain/errors";
+import { haversineMeters, interpolate } from "@/lib/route-geometry";
 import type { LocationService } from "./location-service";
 import type { TripService, TripView } from "./trip-service";
 import {
@@ -232,5 +234,103 @@ describe("SimulatorService", () => {
       "simulator",
     );
     expect(simulator.stop("trip")).toBe(true);
+  });
+
+  it("completes one interval after a ping reaches drop-off even if the route continues", async () => {
+    vi.useFakeTimers();
+    const pickup = { lat: 25, lng: 55 };
+    const north = { lat: 26, lng: 55 };
+    const along = (meters: number) =>
+      interpolate(pickup, north, meters / haversineMeters(pickup, north));
+    const via = along(100);
+    const dropoff = along(200);
+    const overshoot = along(300);
+    const trip = {
+      trip: {
+        ...createdTrip.trip,
+        pickupLatitude: pickup.lat,
+        pickupLongitude: pickup.lng,
+        dropoffLatitude: dropoff.lat,
+        dropoffLongitude: dropoff.lng,
+      },
+      latestPosition: null,
+    } as TripView;
+    const trips = {
+      get: vi.fn().mockResolvedValue(trip),
+      transition: vi.fn().mockResolvedValue(trip),
+    } as unknown as TripService;
+    const locations = {
+      ingest: vi.fn().mockResolvedValue({}),
+    } as unknown as LocationService;
+    const simulator = new SimulatorService(
+      trips,
+      locations,
+      () => new Date("2026-09-10T10:00:00Z"),
+      () => "session",
+      async () => [pickup, via, dropoff, overshoot],
+    );
+
+    await simulator.start("trip", { intervalMs: 5_000, stepMeters: 100 });
+
+    expect(locations.ingest).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(locations.ingest).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(locations.ingest).toHaveBeenCalledTimes(3);
+    expect(locations.ingest).toHaveBeenLastCalledWith(
+      "trip",
+      expect.objectContaining({
+        lat: dropoff.lat,
+        lng: dropoff.lng,
+      }),
+      "simulator",
+    );
+    expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(locations.ingest).toHaveBeenCalledTimes(3);
+    expect(trips.transition).toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(false);
+  });
+
+  it("retries completion after a failed drop-off transition", async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const trips = {
+      get: vi.fn().mockResolvedValue(createdTrip),
+      transition: vi
+        .fn()
+        .mockResolvedValueOnce(createdTrip)
+        .mockRejectedValueOnce(new ConflictError("Trip was modified by another request"))
+        .mockResolvedValueOnce(createdTrip),
+    } as unknown as TripService;
+    const locations = {
+      ingest: vi.fn().mockResolvedValue({}),
+    } as unknown as LocationService;
+    const simulator = new SimulatorService(
+      trips,
+      locations,
+      () => new Date("2026-09-10T10:00:00Z"),
+      () => "session",
+      vi.fn().mockResolvedValue(shortRoute),
+    );
+
+    await simulator.start("trip");
+    await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
+    expect(trips.transition).not.toHaveBeenCalledWith("trip", "completed");
+
+    await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
+    expect(trips.transition).toHaveBeenCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(true);
+    expect(consoleError).toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(SIMULATION_INTERVAL_MS);
+    expect(trips.transition).toHaveBeenCalledTimes(3);
+    expect(trips.transition).toHaveBeenLastCalledWith("trip", "completed");
+    expect(simulator.isRunning("trip")).toBe(false);
+    consoleError.mockRestore();
   });
 });
