@@ -1,5 +1,5 @@
 import { RouteGuard } from "@/components/auth/route-guard";
-import { OperationsDashboard } from "@/components/operations/operations-dashboard";
+import { TripListWorkspace } from "@/components/operations/trip-list-workspace";
 
 export default async function VendorTripsPage({
   params,
@@ -9,7 +9,7 @@ export default async function VendorTripsPage({
   const { vendorId } = await params;
   return (
     <RouteGuard role="controller" vendorId={vendorId}>
-      <OperationsDashboard vendorId={vendorId} />
+      <TripListWorkspace vendorId={vendorId} />
     </RouteGuard>
   );
 }

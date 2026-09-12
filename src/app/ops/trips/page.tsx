@@ -1,4 +1,4 @@
-import { OperationsDashboard } from "@/components/operations/operations-dashboard";
+import { TripListWorkspace } from "@/components/operations/trip-list-workspace";
 
 export default async function OperationsTripsPage({
   searchParams,
@@ -6,5 +6,5 @@ export default async function OperationsTripsPage({
   searchParams: Promise<{ created?: string }>;
 }) {
   const { created } = await searchParams;
-  return <OperationsDashboard createdReference={created} />;
+  return <TripListWorkspace createdReference={created} />;
 }

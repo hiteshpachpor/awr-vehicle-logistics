@@ -1,5 +1,5 @@
 import { RouteGuard } from "@/components/auth/route-guard";
-import { OperationsDashboard } from "@/components/operations/operations-dashboard";
+import { TripFocusWorkspace } from "@/components/operations/trip-focus-workspace";
 
 export default async function TripPage({
   params,
@@ -9,7 +9,7 @@ export default async function TripPage({
   const { id } = await params;
   return (
     <RouteGuard role="authenticated">
-      <OperationsDashboard initialTripId={id} focused />
+      <TripFocusWorkspace tripId={id} />
     </RouteGuard>
   );
 }

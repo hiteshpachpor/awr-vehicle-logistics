@@ -151,7 +151,6 @@ export function TripInspector({
   onSimulate,
   simulating = false,
   simulationPace = null,
-  focused,
   drivers,
   assigningTripId,
   onAssignDriver,
@@ -170,7 +169,6 @@ export function TripInspector({
   onSimulate?: (pace: SimulationPace) => void;
   simulating?: boolean;
   simulationPace?: SimulationPace | null;
-  focused?: boolean;
   drivers?: DriverOption[];
   assigningTripId?: string | null;
   onAssignDriver?: (tripId: string, driverId: string) => void;
@@ -216,10 +214,9 @@ export function TripInspector({
       )}
     >
       <div className="hidden border-b border-border p-5 lg:block">
-        {focused &&
-        !(role === "driver" && trip.trip.status === "in_transit") ? (
+        {role === "driver" && trip.trip.status === "in_transit" ? null : (
           <TripBackLink href={homeHref} className="mb-4" />
-        ) : null}
+        )}
         <TripIdentity trip={trip} streamStatus={streamStatus} />
       </div>
 

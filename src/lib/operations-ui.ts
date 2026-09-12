@@ -1,3 +1,4 @@
+import type { DemoSession } from "./demo-auth";
 import type { ApiErrorBody, TripStatus, TripView } from "./operations-types";
 import { isSameLocation } from "./route-geometry";
 
@@ -239,6 +240,42 @@ export function formatPositionSource(source: "vendor" | "simulator") {
 
 export function formatTripRoute(trip: TripView) {
   return `${trip.trip.pickupAddress} to ${trip.trip.dropoffAddress}`;
+}
+
+export function getInitials(name: string | undefined) {
+  const initials = name
+    ?.trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  return initials || "LV";
+}
+
+export function getWorkspaceChrome(session: DemoSession | null) {
+  if (session?.role === "controller") {
+    return {
+      title: session.vendorName,
+      mark: getInitials(session.vendorName),
+      markColor: "bg-role-controller text-role-mark-foreground",
+    };
+  }
+  if (session?.role === "driver") {
+    return {
+      title: session.driverName,
+      mark: getInitials(session.driverName),
+      markColor: "bg-role-driver text-role-mark-foreground",
+    };
+  }
+  return {
+    title:
+      session?.role === "operations"
+        ? "Operations Control"
+        : "Driver trips",
+    mark: "AWR",
+    markColor: "bg-primary text-primary-foreground",
+  };
 }
 
 export function hasActualDropoffMismatch(trip: TripView) {

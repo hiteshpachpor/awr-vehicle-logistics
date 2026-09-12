@@ -31,6 +31,12 @@ export function getSessionHome(session: DemoSession) {
   return `/vendor/${session.vendorId}/driver/${session.driverId}/trips`;
 }
 
+export function isController(
+  session: DemoSession | null | undefined,
+): session is ControllerSession {
+  return session?.role === "controller";
+}
+
 export function canAccessTrip(
   session: DemoSession,
   trip: {

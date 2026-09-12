@@ -1,5 +1,5 @@
 import { RouteGuard } from "@/components/auth/route-guard";
-import { OperationsDashboard } from "@/components/operations/operations-dashboard";
+import { TripListWorkspace } from "@/components/operations/trip-list-workspace";
 
 export default async function DriverTripsPage({
   params,
@@ -9,7 +9,7 @@ export default async function DriverTripsPage({
   const { vendorId, driverId } = await params;
   return (
     <RouteGuard role="driver" vendorId={vendorId} driverId={driverId}>
-      <OperationsDashboard vendorId={vendorId} driverId={driverId} />
+      <TripListWorkspace vendorId={vendorId} driverId={driverId} />
     </RouteGuard>
   );
 }

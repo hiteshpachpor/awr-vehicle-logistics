@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAccessTrip,
   getSessionHome,
+  isController,
   parseDemoSession,
   type DemoSession,
 } from "./demo-auth";
@@ -26,6 +27,13 @@ describe("demo auth", () => {
     expect(getSessionHome(driver)).toBe(
       "/vendor/vendor-1/driver/driver-1/trips",
     );
+  });
+
+  it("narrows controller sessions", () => {
+    expect(isController({ role: "operations" })).toBe(false);
+    expect(isController(controller)).toBe(true);
+    expect(isController(driver)).toBe(false);
+    expect(isController(null)).toBe(false);
   });
 
   it("scopes controller and driver trip access", () => {

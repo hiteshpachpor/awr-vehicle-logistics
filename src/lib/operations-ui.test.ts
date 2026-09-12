@@ -8,6 +8,8 @@ import {
   formatSpeed,
   formatTripRoute,
   getApiErrorMessage,
+  getInitials,
+  getWorkspaceChrome,
   hasActualDropoffMismatch,
   matchesTrip,
   mergeTripByVersion,
@@ -199,6 +201,47 @@ describe("operations UI helpers", () => {
       local,
       created,
     ]);
+  });
+
+  it("builds workspace chrome from the demo session", () => {
+    expect(getInitials("Crescent Dune")).toBe("CD");
+    expect(getInitials("Bilal")).toBe("B");
+    expect(getInitials("")).toBe("LV");
+    expect(getInitials(undefined)).toBe("LV");
+    expect(getWorkspaceChrome({ role: "operations" })).toEqual({
+      title: "Operations Control",
+      mark: "AWR",
+      markColor: "bg-primary text-primary-foreground",
+    });
+    expect(
+      getWorkspaceChrome({
+        role: "controller",
+        vendorId: "vendor-1",
+        vendorName: "Crescent Dune",
+      }),
+    ).toEqual({
+      title: "Crescent Dune",
+      mark: "CD",
+      markColor: "bg-role-controller text-role-mark-foreground",
+    });
+    expect(
+      getWorkspaceChrome({
+        role: "driver",
+        vendorId: "vendor-1",
+        vendorName: "Crescent Dune",
+        driverId: "driver-1",
+        driverName: "Bilal Rahman",
+      }),
+    ).toEqual({
+      title: "Bilal Rahman",
+      mark: "BR",
+      markColor: "bg-role-driver text-role-mark-foreground",
+    });
+    expect(getWorkspaceChrome(null)).toEqual({
+      title: "Driver trips",
+      mark: "AWR",
+      markColor: "bg-primary text-primary-foreground",
+    });
   });
 
   it("builds create and assign toasts and skips unknown status targets", () => {
