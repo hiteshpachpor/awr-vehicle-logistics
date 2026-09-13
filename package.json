@@ -22,7 +22,7 @@
     "load:up": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml up --build -d --wait",
     "load:ingest": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml --profile k6 run --rm --no-deps k6 run /scripts/ingest.js",
     "load:events": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml --profile k6 run --rm --no-deps k6 run -e EVENT_CLIENTS=50 /scripts/events.js",
-    "load:events:wallboard": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml --profile k6 run --rm --no-deps k6 run -e EVENT_CLIENTS=200 /scripts/events.js",
+    "load:events:wallboard": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml --profile k6 run --rm --no-deps k6 run -e EVENT_CLIENTS=200 -e DURATION=8m /scripts/events.js",
     "load:down": "docker compose -p awr-load -f compose.yaml -f compose.load.yaml --profile k6 down"
   },
   "dependencies": {

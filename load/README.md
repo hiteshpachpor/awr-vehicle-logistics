@@ -52,10 +52,15 @@ npm run load:up
 npm run load:ingest
 ```
 
-In another terminal, while ingest is in the 40 rps hold:
+In another terminal, while ingest is in the 150 rps hold:
 
 ```bash
 npm run load:events
+```
+
+Start the wallboard when the ramp begins (five minutes in), or run it in parallel with a delay:
+
+```bash
 npm run load:events:wallboard
 ```
 
@@ -71,22 +76,48 @@ Tear down with `npm run load:down`. Add `-v` if you want the load volume gone.
 
 | Script | What it does |
 | --- | --- |
-| `load:ingest` | 40 rps hold for 5 minutes across 200 trips (about one ping per trip every 5 s), then ramp 40 → 80 → 150 rps. About 10% of pings reuse `eventId`. Fail the hold if errors exceed 1%. |
-| `load:events` | 50 SSE clients on 50 trips for 5 minutes. Run it with ingest so there are positions to receive. |
-| `load:events:wallboard` | 200 SSE clients, one per load trip. |
+| `load:ingest` | **150 rps hold** for 5 minutes (1 Hz on 200 trips), then ramp 150 → 300 → 500 rps. About 10% of pings reuse `eventId`. Fail the hold if errors exceed 1% or p95 exceeds 200 ms. 40 rps is the realistic 5 s GPS cadence; it is too light for this box. |
+| `load:events` | 50 SSE clients on 50 trips for 5 minutes, paired with the 150 rps hold. |
+| `load:events:wallboard` | 200 SSE clients for 8 minutes, paired with the 300–500 ramp. |
 
-## Outcome
+## What we measured
 
-Host: Docker Desktop on macOS, 2026-09-13. Production image (`next start`), 200 load trips, default pool size 10. k6 ingest and SSE ran together: 50 SSE clients during the 40 rps hold, 200 SSE clients during the ramp.
+Two runs on Docker Desktop on macOS, 13 Sep 2026. Production app (`next start`), 200 fake in-transit trips, one CPU and 1 GiB for the app, the same for Postgres.
 
-**40 rps hold** (the 200-trip / 5 s GPS cadence): 12,001 requests, **0% failed**, 40.00 iters/s, hold checks 100%.
+In plain terms: **how many GPS pings per second can this small box take while dashboards are watching, before it gets slow?**
 
-**Ramp to 150 rps:** 36,158 requests across the whole script, **0 HTTP errors**. Overall ingest p95 **37 ms** (p99 466 ms, max 1.68 s). **Did not break at 150 rps.** 143 dropped k6 iterations at the top of the ramp were generator scheduling, not 4xx/5xx.
+### Easy load: 40 pings per second
 
-**50 SSE clients:** 5 minutes, **3,850** `position` events (~12/s). JSON and monotonic-id checks 100%. That rate matches 50 of 200 trips receiving ~40 writes/s.
+That is 200 trips sending a ping every 5 seconds — the same cadence as the in-app simulator.
 
-**200 SSE clients:** 5 minutes, **26,200** events (~79/s) during the ramp. Same checks green.
+The app barely noticed. Every request succeeded. Typical response time was **37 milliseconds**. The CPU sat around a quarter busy.
 
-**Box:** App CPU ~20–35% of 1 CPU in the hold, peak **86%** with 200 SSE clients plus 150 rps. RSS **82–154 MiB** of 1 GiB. Postgres peak ~80% of 1 CPU, **38–72 MiB**. No OOM, no CPU hard-throttle. `/api/health` stayed ok.
+That number is realistic for vendors. It is too gentle to learn where the product breaks.
 
-40 rps on this box is boring. The 1 vCPU / 1 GiB process still served 150 location POSTs per second with live SSE fan-out. The next place to look is not ingest latency; it is connection count and the default pool of 10 if you keep climbing.
+### Harder load: 150 pings per second
+
+That is 200 trips sending about once a second, with 50 dashboards watching.
+
+This is the useful test. Every request still succeeded. Most responses were fast; **95% finished within 164 milliseconds** (we required under 200). The CPU was about half busy, and sometimes maxed out for a moment. Memory stayed under 320 MiB of the 1 GiB cap.
+
+Dashboards received the pings in order. About 33 updates per second reached the 50 watchers, which is what you would expect if they were looking at 50 of the 200 trips.
+
+**150 pings per second is a load this box can hold.**
+
+### Until it queues: 500 pings per second
+
+We then pushed toward 300 and 500 pings per second, with all 200 dashboards open.
+
+The app still almost never returned an error. It just **got slow**. At the top of the ramp, 95% of pings took **more than two seconds**. k6 had 1,000 virtual users waiting and still could not send 500 pings every second — the server was busy, so new pings piled up.
+
+CPU was pinned. Memory was fine (still ~320 MiB). Postgres was not the problem. Health checks still passed.
+
+**The product does not crash at 500 pings per second. It queues.** People would see a lagging marker, not a red error. The limit is the single Node process and its 10 database connections, not disk or RAM.
+
+### Takeaway
+
+| Pings per second | What it feels like |
+| --- | --- |
+| 40 | Easy. Like 200 vehicles pinging every 5 seconds. |
+| 150 | Busy but OK. Like those vehicles pinging every second. |
+| 500 | Markers lag by seconds. Requests wait in line instead of failing. |

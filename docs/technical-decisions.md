@@ -82,4 +82,4 @@ I spent the unit and integration time on bugs that fail quietly: occupancy index
 
 k6 is now in the repo for the ingest and SSE path the brief asked for. `npm run load:up` starts the production image with 1 CPU / 1 GiB on the app and on Postgres, then seeds 200 isolated in-transit trips beside the unchanged demo dataset. `npm run load:ingest` and `npm run load:events` run from an unconstrained k6 container on the same Compose network so the generator does not steal cycles from the box.
 
-The first measured run is the source of capacity numbers. They live in [load/README.md](../load/README.md). Playwright is still not here; the load harness does not replace an E2E walkthrough.
+Measured numbers are in [load/README.md](../load/README.md). On 1 CPU / 1 GiB, 150 GPS pings per second stayed fast enough; at 500 the app queued instead of crashing. Playwright is still not here; the load harness does not replace an E2E walkthrough.

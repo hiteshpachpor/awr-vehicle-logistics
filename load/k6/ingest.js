@@ -6,35 +6,37 @@ import { baseUrl, loadTripCount, loadTripId } from "./ids.js";
 const trips = loadTripCount();
 
 export const options = {
+  discardResponseBodies: true,
   summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
   scenarios: {
     hold: {
       executor: "constant-arrival-rate",
-      rate: 40,
+      rate: 150,
       timeUnit: "1s",
       duration: "5m",
-      preAllocatedVUs: 40,
-      maxVUs: 80,
+      preAllocatedVUs: 80,
+      maxVUs: 250,
       exec: "ingest",
     },
     ramp: {
       executor: "ramping-arrival-rate",
       startTime: "5m",
-      startRate: 40,
+      startRate: 150,
       timeUnit: "1s",
-      preAllocatedVUs: 80,
-      maxVUs: 220,
+      preAllocatedVUs: 250,
+      maxVUs: 1000,
       stages: [
-        { target: 80, duration: "1m" },
-        { target: 80, duration: "1m" },
-        { target: 150, duration: "1m" },
-        { target: 150, duration: "1m" },
+        { target: 300, duration: "2m" },
+        { target: 300, duration: "2m" },
+        { target: 500, duration: "2m" },
+        { target: 500, duration: "2m" },
       ],
       exec: "ingest",
     },
   },
   thresholds: {
     "http_req_failed{scenario:hold}": ["rate<0.01"],
+    "http_req_duration{scenario:hold}": ["p(95)<200"],
     "checks{scenario:hold}": ["rate>0.99"],
   },
 };

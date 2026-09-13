@@ -8,4 +8,4 @@ If you just want to run the app, start with the [README](../README.md). This fol
 - [Additional features](additional-features.md)
 - [Technical decisions](technical-decisions.md)
 - [API](api.md)
-- [Load test](../load/README.md) — 1 CPU / 1 GiB box, 200 in-transit trips, k6 ingest and SSE, plus the measured run
+- [Load test](../load/README.md) — 1 CPU / 1 GiB box. 150 pings/s holds; 500 pings/s queues.

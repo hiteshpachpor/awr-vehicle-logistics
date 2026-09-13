@@ -6,6 +6,14 @@ const trips = loadTripCount();
 const clients = Number(__ENV.EVENT_CLIENTS || 50);
 const duration = __ENV.DURATION || "5m";
 
+function timeoutFor(value) {
+  const match = /^(\d+)m$/.exec(value);
+  if (!match) {
+    return "4m45s";
+  }
+  return `${Number(match[1]) * 60 - 15}s`;
+}
+
 export const options = {
   scenarios: {
     watch: {
@@ -29,7 +37,7 @@ export default function () {
     {
       method: "GET",
       headers: { Accept: "text/event-stream" },
-      timeout: "4m45s",
+      timeout: timeoutFor(duration),
     },
     (client) => {
       client.on("event", (event) => {
