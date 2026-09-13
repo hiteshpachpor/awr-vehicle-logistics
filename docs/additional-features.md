@@ -1,25 +1,27 @@
 # Additional features
 
-The brief was a short checklist. I built a bit more around it so the product made sense as a logistics flow, not just a moving marker.
+The brief listed the core requirements. A few more features were added so that the app works as a complete logistics flow, from creating a trip to seeing the vehicle arrive.
 
-- **Three workspaces (Operations, vendor Controller, Driver).** The brief described three journeys. I gave each role its own screen rather than one dashboard that did everything.
+- **A workspace for each role.** The brief describes separate journeys for operations, vendors and drivers, so each role has its own screens instead of sharing one dashboard.
 
-- **Browser-only demo login.** Auth did not need to be in code, but you still have to pick a persona. The password is `password`, the session lives in localStorage, and the APIs stay open.
+- **Demo sign-in in the browser.** Authentication did not need to be built, but a role still has to be chosen. The password is `password`, the session is stored in localStorage, and the APIs are not protected.
 
-- **Customers, vehicles, vendors, and drivers.** A trip that is only two coordinates cannot really support create, assign, and monitor. Six tables was enough for that without turning into a full fleet system.
+- **Customers, vehicles, vendors and drivers.** A trip needs these records before it can be created, assigned and tracked. Six database tables cover this without turning the app into a full fleet management system.
 
-- **Driver assignment as its own step.** Operations creates a trip against a vendor. The vendor controller assigns a driver. I did not want `driverId` stuffed into create, because that is not how a 3PL handoff works.
+- **Driver assignment as a separate step.** Operations creates a trip for a vendor, and the vendor controller then assigns one of the vendor's drivers. This matches how work is handed over to a 3PL vendor, so the request to create a trip does not include a driver.
 
-- **Occupancy rules.** A driver can only have one in-transit trip. Scheduled trips need a three-hour gap. Trip rows use an optimistic `version`. That stops the same person ending up on two live jobs.
+- **Rules that prevent double booking.** A driver can have only one trip in transit, and a vehicle can be on only one active trip. A driver's scheduled trips must be at least three hours apart. Each trip also has a version number, so one update cannot silently overwrite another.
 
-- **Real browser GPS, with an offline outbox.** The brief allowed a simulator. Assumption 1 still said drivers stream location, so I built that path too. If a ping fails, the outbox keeps the original device timestamp and `eventId`, and retries later.
+- **Real browser GPS with an offline queue.** The brief allowed a simulator, but its first assumption says that drivers send their location during a trip, so real GPS was built as well. If a ping cannot be sent, it is kept on the device with its original timestamp and event ID and sent again later.
 
-- **Google Maps link import on New Trip.** People here share Maps links more often than they type coordinates. The form accepts a full URL or a `maps.app.goo.gl` short link and fills name, latitude, and longitude. No Google API key.
+- **Google Maps link import when creating a trip.** Locations are often shared as Google Maps links rather than coordinates. The New Trip form accepts a full Google Maps URL or a `maps.app.goo.gl` short link, and fills in the place name, latitude and longitude. No Google API key is needed.
 
-- **Simulator follows the mapped driving route.** A straight line between pickup and drop-off looks wrong next to the road on the map. Interval plus kilometres per ping is how you say “3 km every 10 seconds.” After the last drop-off ping, the trip completes by itself.
+- **A simulator that follows the driving route.** A straight line between pickup and drop-off would cut across roads on the map, so the simulator follows the Mapbox driving route. Its pace is set by the update interval and the distance per ping, for example 3 km every 10 seconds. The trip is completed automatically after the last ping at the drop-off point.
 
-- **Docker Compose, seed data, health check.** `docker compose up --build` is the usual way to run the stack. The seed is a small UAE-shaped dataset so the screens are not empty.
+- **Docker Compose, demo data and a health check.** `docker compose up --build` starts the whole stack. The demo data is a small UAE-based dataset, so the screens have content from the start.
 
-- **Idempotent ingestion, dual timestamps, LISTEN/NOTIFY, SSE replay.** Refresh, reconnect, and a vendor posting the same ping twice all have to land cleanly. Those pieces are how that works.
+- **Reliable location updates.** Duplicate pings are ignored by using the event ID. Each ping stores both the time the device recorded it and the time the server received it. A dashboard that reconnects receives the pings it missed. Together, these keep the map correct after a page refresh, a dropped connection, or a vendor sending the same ping twice.
 
-- **Extra APIs.** List trips, customer/vehicle/vendor/driver lookups, recent positions, simulation status, Maps resolve, and health. The three endpoints in the brief were not enough to drive the dashboard.
+- **Extra API endpoints.** The dashboard also needs a trip list, lookups for customers, vehicles, vendors and drivers, recent positions, simulation status, Google Maps link lookup and a health check. The three endpoints in the brief were not enough to support the screens.
+
+- **Load and end-to-end tests.** A k6 load test measures how much location traffic one small instance can handle, and Playwright tests cover the main trip journey in a real browser.

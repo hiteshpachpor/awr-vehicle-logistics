@@ -1,8 +1,8 @@
 # API
 
-HTTP endpoints the app uses. There is no authentication on them. The demo session only lives in the browser.
+This page lists the HTTP endpoints used by the app. The endpoints have no authentication, and the demo session is stored only in the browser.
 
-JSON request bodies are validated with Zod unless a section says otherwise. Errors look like `{ "error": { "code", "message", "details?" } }`.
+JSON request bodies are validated with Zod unless a section says otherwise. Errors use this format: `{ "error": { "code", "message", "details?" } }`.
 
 ## Lookups
 
@@ -13,11 +13,11 @@ GET /api/vendors
 GET /api/drivers
 ```
 
-These feed the New Trip form and driver assignment. Vehicles are scoped to a customer. Vendors and drivers are the active ones.
+These endpoints provide the options for the New Trip form and for driver assignment. Vehicles are filtered by customer, and only active vendors and drivers are returned.
 
-`POST /api/google-maps/resolve` accepts `{ "url": "..." }` and returns a place name with coordinates from a Google Maps link, including `maps.app.goo.gl` short links.
+`POST /api/google-maps/resolve` accepts `{ "url": "..." }` and returns the place name and coordinates from a Google Maps link. Short links from `maps.app.goo.gl` are also supported.
 
-`GET /api/health` checks that PostgreSQL is reachable.
+`GET /api/health` checks whether the app can reach PostgreSQL.
 
 ## Trips
 
@@ -51,7 +51,7 @@ Create a trip:
 }
 ```
 
-Start or complete:
+Start or complete a trip:
 
 ```json
 { "status": "in_transit" }
@@ -63,7 +63,7 @@ Assign a driver before the trip starts:
 { "driverId": "00000000-0000-4000-8000-000000000004" }
 ```
 
-Allowed transitions are `created → in_transit → completed`. Created and in-transit trips may also be cancelled. A driver has to be assigned before a trip can start.
+A trip moves from `created` to `in_transit` to `completed`. A trip that is `created` or `in_transit` can also be cancelled. A driver must be assigned before a trip can start.
 
 ## Location
 
@@ -81,9 +81,9 @@ POST /api/trips/:id/location
 }
 ```
 
-`eventId` is optional and unique per trip. Device time is stored as `recorded_at`. The time the server accepted the POST is `received_at`.
+`eventId` is optional and must be unique within a trip. The device time is stored as `recorded_at`, and the time the server accepted the request is stored as `received_at`.
 
-The driver workspace queues GPS pings while offline and POSTs them later with the original device `timestamp` and a stable `eventId`.
+When the driver is offline, the driver workspace keeps GPS pings in a queue. It sends them later with the original device `timestamp` and the same `eventId`.
 
 ## Live events
 
@@ -93,7 +93,7 @@ Accept: text/event-stream
 Last-Event-ID: 42
 ```
 
-The stream emits `position` events and heartbeat comments. The numeric position id is the SSE cursor. On reconnect, missed rows are replayed from PostgreSQL.
+This stream sends `position` events, along with heartbeat comments to keep the connection open. Each position's numeric ID is used as the SSE event ID. When a client reconnects, the positions it missed are loaded from PostgreSQL and sent first.
 
 ```text
 GET /api/trips/events
@@ -101,7 +101,7 @@ GET /api/trips/events?vendorId=:id
 Accept: text/event-stream
 ```
 
-The list stream emits `trip.updated` events when a trip is created, a driver is assigned, or status changes (`created`, `in_transit`, `completed`, `cancelled`). Payload is `{ type, from?, to?, trip }` where `trip` is the same `TripView` as `GET /api/trips/:id`. Operations omits `vendorId`; a logistics vendor controller passes their vendor id. There is no `Last-Event-ID` replay; clients refetch `GET /api/trips` after reconnect.
+This stream sends a `trip.updated` event when a trip is created, when a driver is assigned, or when the status changes (`created`, `in_transit`, `completed` or `cancelled`). The payload is `{ type, from?, to?, trip }`, where `trip` has the same shape as the response from `GET /api/trips/:id`. Operations connects without `vendorId`, and a vendor controller passes their own vendor ID. Missed events are not replayed, so after reconnecting, clients fetch `GET /api/trips` again.
 
 ## Simulator
 
@@ -111,8 +111,8 @@ POST   /api/trips/:id/simulation
 DELETE /api/trips/:id/simulation
 ```
 
-`POST` starts a scheduled trip and follows the same Mapbox driving route shown on the map. The body may include `intervalMs` (1,000–60,000) and `stepMeters` (100–20,000). Defaults are a ping every 5 seconds, advancing 1 km.
+`POST` starts a scheduled trip and moves the vehicle along the same Mapbox driving route shown on the map. The body can include `intervalMs` (1,000 to 60,000) and `stepMeters` (100 to 20,000). By default, a ping is sent every 5 seconds and the vehicle moves 1 km each time.
 
-It posts one GPS ping immediately at pickup, then one at each interval, through the same ingestion path as vendor traffic. Speed comes from those two values (3 km every 10 seconds is 1,080 km/h). After the last drop-off ping, it waits one more interval and completes the trip. If Mapbox directions are unavailable, it uses a straight line between pickup and drop-off.
+The first GPS ping is sent straight away at the pickup point, and then one ping is sent at each interval. The pings go through the same location API as vendor traffic. The speed is calculated from the interval and the distance, so 3 km every 10 seconds is 1,080 km/h. After the last ping at the drop-off point, the simulator waits one more interval and completes the trip. If Mapbox directions are not available, it uses a straight line between pickup and drop-off.
 
-`GET` reports whether a simulation is running. `DELETE` stops the current run without completing the trip.
+`GET` shows whether a simulation is running. `DELETE` stops the current simulation and leaves the trip in transit.

@@ -1,16 +1,16 @@
 # AWR Vehicle Live Tracking
 
-AWR works with logistics vendors who pick up and drop off customer vehicles. Once a trip is underway, operations needs a live view of where that vehicle is.
+AWR works with logistics vendors who pick up and drop off customers' vehicles. While a trip is in progress, the AWR operations team needs to see where the vehicle is.
 
-This app is that dashboard. Operations creates a trip, a vendor assigns a driver, and the driver either shares phone GPS or runs a simulated journey along the driving route. Positions show up in real time on the list, the map, and a log of every ping.
+This app gives operations that view. Operations creates a trip, the vendor assigns a driver, and the driver either shares their browser location or runs a simulated journey along the driving route. Each location ping appears live on the trip's map and in its ping log, and the trip list updates when a trip changes status.
 
-More detail lives in [docs/README.md](docs/README.md): the original brief, extras we added, technical decisions, and the API.
+More detail is in [docs/README.md](docs/README.md), including the original brief, the features added beyond it, the technical decisions and the API.
 
 ## Setup and installation
 
-You need Docker with Docker Compose, or Node.js 22+ and PostgreSQL 17+.
+The app needs Docker with Docker Compose, or Node.js 22 or later with PostgreSQL 17 or later.
 
-Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL-restricted public Mapbox token. The APIs still run without it. The map and the driving-route simulator then fall back to a straight line between pickup and drop-off.
+Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a public Mapbox token that is restricted to your URLs. The APIs work without a token. In that case, the map and the simulator use a straight line between pickup and drop-off instead of the driving route.
 
 ### Docker
 
@@ -18,19 +18,19 @@ Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` to a URL
 docker compose up --build
 ```
 
-PostgreSQL starts, the app waits until it is healthy, migrations run, demo data loads, and the app is at [http://localhost:3000](http://localhost:3000).
+This starts PostgreSQL, waits until it is healthy, runs the migrations, loads the demo data and starts the app at [http://localhost:3000](http://localhost:3000).
 
-Hot reload while you edit `src`:
+To run the app with hot reload while editing files in `src`:
 
 ```bash
 npm run docker:dev
 ```
 
-Stop that stack with `npm run docker:down`. Wipe local data with `docker compose down --volumes`.
+Stop this stack with `npm run docker:down`. To also delete the local data, run `docker compose down --volumes`.
 
 ### Local Node
 
-Start PostgreSQL yourself, then:
+With PostgreSQL already running:
 
 ```bash
 npm install
@@ -39,27 +39,27 @@ npm run db:seed
 npm run dev
 ```
 
-To empty the tables, reset identity sequences, and reload the same dataset:
+To clear the tables, reset the ID sequences and load the same demo data again:
 
 ```bash
 npm run db:seed -- --reset-db
 ```
 
-That flag deletes application data. Drizzle’s migration history stays in place so applied migrations are not rerun.
+This deletes all application data. Drizzle's migration history is kept, so migrations that have already run are not run again.
 
 ### Sign in
 
-Open `/` and use the password `password`.
+Open `/` and sign in as one of these roles with the password `password`:
 
-- **Operations:** create trips, assign work, cancel a trip that has not finished.
-- **Vendor controller:** assign drivers for that vendor.
-- **Driver:** start, simulate, or end an assigned trip. Simulated trips follow the mapped route. Live trips share browser geolocation.
+- **Operations** creates trips and can cancel trips that are scheduled or in transit.
+- **Vendor controller** assigns the vendor's drivers to trips.
+- **Driver** starts, simulates or ends an assigned trip. A simulated trip follows the driving route on the map, and a live trip shares the browser's location.
 
-The session is stored in the browser. APIs have no authentication.
+The session is stored in the browser, and the APIs have no authentication.
 
-The seed is 30 fictional UAE vehicle owners (one vehicle each), five logistics vendors, ten drivers, and one ready-to-start trip. Makes are Nissan 12, INFINITI 7, Renault 5, Chery 4, and Zeekr 2.
+The demo data includes 30 fictional vehicle owners in the UAE with one vehicle each, five logistics vendors, ten drivers and 20 scheduled trips. The vehicles are 12 Nissan, 7 INFINITI, 5 Renault, 4 Chery and 2 Zeekr.
 
-Stable ids:
+These IDs stay the same each time the demo data is loaded:
 
 ```text
 Customer: 00000000-0000-4000-8000-000000000001
@@ -71,7 +71,7 @@ Trip:     00000000-0000-4000-8000-000000000005
 
 ## Architecture and stack
 
-The app runs as a long-lived Next.js Node process. PostgreSQL stores trips and positions. A location write does not talk to dashboards directly. It notifies the database, and SSE clients listen.
+The app runs as a long-running Next.js Node process, and PostgreSQL stores the trips and location pings. The location API does not send updates to dashboards directly. It saves the ping and sends a database notification, and the SSE endpoint listens for that notification.
 
 ```text
 Driver → location API → trip_positions → PostgreSQL NOTIFY
@@ -79,9 +79,9 @@ Driver → location API → trip_positions → PostgreSQL NOTIFY
 Dashboard ← SSE endpoint ← PostgreSQL LISTEN + database replay
 ```
 
-Notifications are lightweight and not durable. Position rows are. If an SSE client reconnects with `Last-Event-ID`, missed points are replayed from PostgreSQL.
+Notifications are not stored, but the location pings are. When an SSE client reconnects with `Last-Event-ID`, the pings it missed are loaded from PostgreSQL and sent again.
 
-Drizzle handles the schema, Zod validates HTTP input, Mapbox draws the map and driving directions, and Vitest runs the tests.
+Drizzle manages the database schema, Zod validates API requests, and Mapbox provides the map and driving directions. Vitest runs the unit and integration tests, Playwright runs the end-to-end tests, and k6 runs the load test.
 
 ## Testing
 
@@ -93,11 +93,22 @@ npm run test:coverage
 npm run build
 ```
 
-Database integration tests use Testcontainers, so they need a running Docker daemon. They apply migrations to a fresh PostgreSQL instance and check constraints, idempotent seeding, and `LISTEN/NOTIFY`.
+The database integration tests use Testcontainers, so Docker must be running. They apply the migrations to a new PostgreSQL instance and check the database constraints, repeated seeding, and `LISTEN/NOTIFY`.
+
+### End-to-end tests
+
+The Playwright tests cover the main trip journey in Chromium. Operations signs in and creates a trip, the vendor controller assigns a driver, the driver runs a simulation, operations watches the pings arrive, and the driver ends the trip.
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+Before the tests start, the demo data is reset and loaded again, so any data added locally is deleted. PostgreSQL must be running and reachable with the settings in `.env`. The tests use the app at [http://localhost:3000](http://localhost:3000) if it is already running, and otherwise start it with `npm run dev`. To open Playwright's interactive mode, run `npm run test:e2e:ui`.
 
 ### Load test
 
-k6 is not part of `npm test`. It needs the production Compose stack with CPU and memory caps. See [load/README.md](load/README.md).
+The k6 load test is not part of `npm test`. It runs against the production Docker Compose stack with CPU and memory limits. The setup and results are described in [load/README.md](load/README.md).
 
 ```bash
 npm run load:up
@@ -106,4 +117,4 @@ npm run load:events
 npm run load:down
 ```
 
-`npm run db:seed` is still the demo dataset. Pass `--load-trips=200` only when you want the extra in-transit fleet for ingest.
+`npm run db:seed` loads only the demo data. The 200 extra in-transit trips used by the load test are added only when `--load-trips=200` is passed.
