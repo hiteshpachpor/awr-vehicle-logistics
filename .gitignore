@@ -5,3 +5,8 @@ coverage
 *.tsbuildinfo
 npm-debug.log*
 .DS_Store
+docs/scripts/deck.html
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -278,15 +278,29 @@ Pings from real drivers and from the simulator follow the same path. They are to
 
 ### 2.4 How you would handle scale (100+ concurrent trips)
 
-**Current capacity of the demo version**
+**Measured capacity of one instance**
 
-- 100 trips sending a ping every 5 seconds adds up to about 20 saves per second, or about 1.7 million rows per day. PostgreSQL handles this load comfortably with an index on trip and time.
-- 20 operations users each watching one trip means 20 open connections, which is a small load for one Node process.
+The demo version was load tested with k6 on a small server: 1 CPU and 1 GiB of memory for the app, the same for PostgreSQL, and 200 trips in transit.
+
+| Pings per second | Live dashboards | Result |
+| --- | --- | --- |
+| 40 (200 trips pinging every 5 seconds) | Connected | Every request succeeded. Typical response time was 37 ms |
+| 150 (200 trips pinging every second) | 50 | Every request succeeded, and 95% finished within 164 ms |
+| 500 | 200 | Almost no errors, but 95% of requests took more than 2 seconds as they queued |
+
+100 trips pinging every 5 seconds is about 20 pings per second, well within what one instance handled.
+
+### 2.4 How you would handle scale (100+ concurrent trips)
+
+**Current design choices that help**
+
+- 20 pings per second adds up to about 1.7 million rows per day. An index on trip and time keeps timeline queries fast at that size.
 - The dashboard opens a live connection only for the trip being viewed, so a list of 100 trips does not open 100 connections.
 
-**Limits with a second app instance**
+**Limits of a single instance**
 
-- The database listener runs inside one process. Users connected to another instance would not get live updates until they reconnect.
+- In the load test, the single Node process ran out of CPU at around 500 pings per second, while PostgreSQL and memory still had room.
+- The database listener runs inside one process. Users connected to a second instance would not get live updates until they reconnect.
 - Running simulations are held in the memory of the process that started them.
 
 ### 2.4 How you would handle scale (100+ concurrent trips)
@@ -683,14 +697,14 @@ Mixpanel or a similar product analytics tool is not needed at the start. It can 
 | Unit tests | Core business logic | Trip status changes, driver availability rules, request validation, route and distance calculations, the offline ping queue, and role access | Add tests with each new feature |
 | Integration tests | API routes and the live connection lifecycle | API handler tests, and tests against a real PostgreSQL database (using Testcontainers) for database rules, duplicate pings and database notifications | HTTP tests against a running server |
 | Component tests | UI components with React Testing Library | Not covered yet | Trip list, driver assignment and live connection status |
-| E2E tests | Playwright: trip simulation and live map update | Not covered yet | Sign in, assign a driver, run a simulation, and check that a new ping moves the map marker |
-| Performance tests | Load test of the location API (k6 or Artillery) | Not covered yet | Around 20 pings per second with 50 open live connections, run nightly |
+| E2E tests | Playwright: trip simulation and live map update | The main trip journey in Chrome, from signing in to ending the trip | Cancelling, search and filters, role access, tablet layout, Firefox and WebKit |
+| Performance tests | Load test of the location API (k6 or Artillery) | k6 load test of the location API and live connections on a 1 CPU, 1 GiB server | Run nightly against staging, on servers sized like production |
 
 ### Approach by layer
 
-**Focus of the current tests**
+**Focus of the tests**
 
-Most of the current tests cover issues that are hard to spot by using the app, such as a driver being put on two trips at once or a ping being saved twice after a retry.
+Unit and integration tests cover issues that are hard to spot by using the app, such as a driver being put on two trips at once or a ping being saved twice after a retry. The Playwright tests check that the main journey works in a real browser, and the k6 test shows how much traffic one instance can take.
 
 **When each type of test runs**
 
@@ -698,6 +712,52 @@ Most of the current tests cover issues that are hard to spot by using the app, s
 - Integration tests need Docker, so the CI pipeline runs them in an environment where Docker is available.
 - End-to-end tests run against a preview environment before changes reach staging.
 - Performance tests run nightly against staging, so they do not slow down pull requests.
+
+### E2E tests
+
+Playwright tests cover the key user stories of the main trip journey, in Chrome.
+
+**Key user stories**
+
+1. As Operations, I sign in so I can open the operations trip workspace.
+2. As Operations, I create a trip for a customer's vehicle, with a vendor and the pickup and drop-off locations.
+3. As a vendor controller, I assign a driver to that unassigned trip.
+4. As a driver, I start a simulated journey so the vehicle sends its location.
+5. As Operations, I watch those pings arrive live on the trip, in the ping log and as a map marker when it appears.
+6. As a driver, I end the trip so it is no longer in transit.
+
+**Out of scope**
+
+Cancelling a trip, search and filters, Google Maps link import, live browser GPS and the offline queue, a wrong password, the role access rules, tablet layout, and the Firefox and WebKit browsers.
+
+### Performance tests
+
+**Test setup**
+
+- The app and PostgreSQL were each limited to 1 CPU and 1 GiB of memory, similar to one small server.
+- 200 trips were already in transit, kept separate from the demo data.
+- k6 ran in its own container with no limits, so it did not take CPU away from the app.
+- About 1 in 10 pings reused an event ID, so duplicate retries were part of the traffic.
+- 50 live connections were opened during the 150 pings per second run, and 200 during the run up to 500 pings per second.
+- The 150 pings per second run passed only if fewer than 1% of requests failed and 95% finished within 200 ms. It ran for 5 minutes, and was then increased step by step to 500.
+
+The tests ran on Docker Desktop, whose limits are close to a small Google Cloud server but not identical, so the results are a guide for one instance.
+
+### Performance tests
+
+**Results**
+
+| Pings per second | Live dashboards | Response time (95% of requests) | What happened |
+| --- | --- | --- | --- |
+| 40 | Connected | Typical response 37 ms | Every request succeeded, and the CPU was about a quarter busy |
+| 150 | 50 | 164 ms | Every request succeeded. Memory stayed under 320 MiB. Dashboards received about 33 updates per second, in order |
+| 300 to 500 | 200 | More than 2 seconds | Almost no errors. The CPU was fully used and requests waited in line |
+
+**What the results show**
+
+- One instance of this size can hold 150 pings per second, which is 200 vehicles pinging every second.
+- The limit is the single Node process and its 10 database connections. PostgreSQL, memory and disk still had room.
+- Under heavy load the app slows down and keeps accepting pings, so operations would see the marker lag behind.
 
 ## 9. Deployment Strategy
 
@@ -745,7 +805,7 @@ Feature branches are kept short and merged into `main` through pull requests. `m
 
 **Automated tests**
 
-Every pull request runs lint, type checks, unit and integration tests, and a production build. A Playwright test on a preview environment and a Terraform plan can be added later.
+Every pull request runs lint, type checks, unit and integration tests, and a production build. The Playwright tests then run against a preview environment. The k6 load test runs nightly against staging, and a Terraform plan is added once the infrastructure is defined in code.
 
 **Staged rollout**
 
@@ -776,6 +836,9 @@ With a single instance, a deployment briefly drops live connections. Browsers re
 | Live connection drop rate | Alert if reconnects rise sharply | Check proxies and load balancers for closed or buffered connections |
 | Trips with no recent location | Tracked as a product metric | Alert operations and check the vendor and the location API |
 | Conflicting trip updates | Expected to be rare | Investigate a sudden increase, as it usually points to a bug |
+| App CPU usage | Under 80% | Add an instance or a larger server. In the load test, requests started to queue once the CPU was fully used |
+
+The 200 ms response time target is the same one used in the k6 load test, where one instance stayed within it at 150 pings per second.
 
 Google Cloud Monitoring and Logging cover the platform, and an error tracking tool covers the Next.js app. The `/api/health` endpoint is used for both the uptime check and the Kubernetes health check.
 
@@ -805,7 +868,7 @@ Terraform is the default choice because it is widely used and well supported on 
 | Demo role switcher and open APIs | Real sign-in, device tokens and server-side access checks | The brief allows authentication to be covered in the presentation only |
 | Database notifications within one process | Message bus (Pub/Sub or Redis) | One instance was enough to run the full flow end to end |
 | Simulations held in the app's memory | A separate simulator worker | The simulator is a tool for demos and testing |
-| Unit and integration tests | Component, Playwright and k6 tests | The data rules and live update logic were tested first |
+| Unit, integration and k6 load tests, and Playwright tests for the main journey | Component tests, more E2E scenarios, and nightly load tests on servers sized like production | The data rules, live updates and the main journey were tested first |
 | No downstream notifications | `trip.started` and `trip.completed` events and webhooks | There were no real SMS or CRM systems to connect to |
 
 ### What would be done differently with more time
