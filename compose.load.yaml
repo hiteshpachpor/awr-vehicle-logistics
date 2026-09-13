@@ -1,0 +1,52 @@
+services:
+  database:
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_buffers=256MB",
+        "-c",
+        "max_connections=100",
+      ]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    cpus: 1.0
+    mem_limit: 1g
+
+  application:
+    environment:
+      DATABASE_URL: postgres://awr:awr@database:5432/awr
+      NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: ${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:-}
+      PORT: 3000
+      LOAD_TRIPS: ${LOAD_TRIPS:-200}
+      NODE_OPTIONS: --max-old-space-size=768
+    command:
+      [
+        "sh",
+        "-c",
+        "npm run db:migrate && npm run db:seed -- --reset-db --load-trips=$$LOAD_TRIPS && npm start",
+      ]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    cpus: 1.0
+    mem_limit: 1g
+
+  k6:
+    image: grafana/k6:1.3.0
+    profiles: ["k6"]
+    depends_on:
+      application:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://application:3000
+      LOAD_TRIPS: ${LOAD_TRIPS:-200}
+    volumes:
+      - ./load/k6:/scripts
+    working_dir: /scripts
+    entrypoint: ["k6"]

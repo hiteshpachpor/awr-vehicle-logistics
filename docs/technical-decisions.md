@@ -78,6 +78,8 @@ Animating the marker in the browser would have looked live on one screen. It wou
 
 ## Vitest and Testcontainers vs Playwright and k6
 
-I spent the testing time on unit tests and a real PostgreSQL via Testcontainers: schema, idempotency, and `LISTEN/NOTIFY`. Those were the bits I thought would break quietly.
+I spent the unit and integration time on bugs that fail quietly: occupancy indexes, duplicate `eventId`, and `LISTEN/NOTIFY`. Those still live in Vitest and Testcontainers.
 
-Playwright and k6 are not in the repo. I would add them when the UI flows and load path were what I needed coverage on.
+k6 is now in the repo for the ingest and SSE path the brief asked for. `npm run load:up` starts the production image with 1 CPU / 1 GiB on the app and on Postgres, then seeds 200 isolated in-transit trips beside the unchanged demo dataset. `npm run load:ingest` and `npm run load:events` run from an unconstrained k6 container on the same Compose network so the generator does not steal cycles from the box.
+
+The first measured run is the source of capacity numbers. They live in [load/README.md](../load/README.md). Playwright is still not here; the load harness does not replace an E2E walkthrough.

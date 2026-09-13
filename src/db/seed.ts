@@ -8,6 +8,11 @@ import {
   trips,
   vehicles,
 } from "./schema";
+import {
+  buildLoadFleet,
+  insertLoadFleet,
+  parseLoadTripCount,
+} from "./seed-load";
 
 export const seedIds = {
   customer: "00000000-0000-4000-8000-000000000001",
@@ -379,7 +384,11 @@ export async function resetDatabase(db: Database) {
   `);
 }
 
-export async function seedDatabase(db: Database, seedTime = new Date()) {
+export async function seedDatabase(
+  db: Database,
+  seedTime = new Date(),
+  loadTripCount = 0,
+) {
   await db
     .insert(customers)
     .values(seededCustomers)
@@ -404,16 +413,19 @@ export async function seedDatabase(db: Database, seedTime = new Date()) {
     .insert(trips)
     .values(buildSeededTrips(seedTime))
     .onConflictDoNothing();
+
+  await insertLoadFleet(db, buildLoadFleet(loadTripCount, seedTime));
 }
 
 async function main() {
+  const args = process.argv.slice(2);
   const { db, pool } = createDatabase(getEnvironment().DATABASE_URL);
 
   try {
-    if (shouldResetDatabase(process.argv.slice(2))) {
+    if (shouldResetDatabase(args)) {
       await resetDatabase(db);
     }
-    await seedDatabase(db);
+    await seedDatabase(db, new Date(), parseLoadTripCount(args));
   } finally {
     await pool.end();
   }

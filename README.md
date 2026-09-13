@@ -94,3 +94,16 @@ npm run build
 ```
 
 Database integration tests use Testcontainers, so they need a running Docker daemon. They apply migrations to a fresh PostgreSQL instance and check constraints, idempotent seeding, and `LISTEN/NOTIFY`.
+
+### Load test
+
+k6 is not part of `npm test`. It needs the production Compose stack with CPU and memory caps. See [load/README.md](load/README.md).
+
+```bash
+npm run load:up
+npm run load:ingest
+npm run load:events
+npm run load:down
+```
+
+`npm run db:seed` is still the demo dataset. Pass `--load-trips=200` only when you want the extra in-transit fleet for ingest.
